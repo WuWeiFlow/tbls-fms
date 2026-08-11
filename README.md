@@ -1024,6 +1024,13 @@ detectVirtualRelations:
 | `identical`                  | `some_table.user_id` | `users.user_id` |
 | `identicalSingularTableName` | `some_table.user_id` | `user.user_id`  |
 | `invertedSingularTableName`  | `some_table.id_user` | `user.id`       |
+| `fms`                        | `sr_order_hrs.order_id` | `sr_order.id_` |
+
+The `fms` strategy is intended for module-prefixed tables whose primary key is
+`id_` and whose reference columns end in `_id`. The first segment of the child
+table is used as the module prefix, so `sys_user_role.user_id` is detected as a
+reference to `sys_user.id_`. To reduce false positives, the inferred parent
+column must be a primary key and its database type must match the child column.
 
 
 ### Dictionary
