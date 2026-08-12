@@ -45,7 +45,7 @@ jobs:
 
       - name: Decrypt secrets
         run: gpg --quiet --batch --yes --decrypt --passphrase="$GCP_CLIENT_SECRETS_PASSPHRASE" --output $GITHUB_WORKSPACE/client_secrets.json $GITHUB_WORKSPACE/client_secrets.json.gpg
-        if: github.ref == 'refs/heads/main'
+        if: github.ref == 'refs/heads/main' && vars.ENABLE_BIGQUERY_INTEGRATION == 'true'
         env:
           GCP_CLIENT_SECRETS_PASSPHRASE: ${{ secrets.GCP_CLIENT_SECRETS_PASSPHRASE }}
 
@@ -69,7 +69,7 @@ jobs:
 
       - name: Run BigQuery integration
         run: make test_bigquery
-        if: github.ref == 'refs/heads/main'
+        if: github.ref == 'refs/heads/main' && vars.ENABLE_BIGQUERY_INTEGRATION == 'true'
 
       - name: Run install script (aka use)
         run: sh use
