@@ -1,0 +1,12 @@
+services:
+  tbls:
+    image: ghcr.io/wuweiflow/tbls-fms:latest
+    env_file:
+      - .env
+    working_dir: /work
+    volumes:
+      - ./.tbls.yml:/work/.tbls.yml:ro
+      - ./docs:/work/docs
+    command:
+      - doc
+      - --force
