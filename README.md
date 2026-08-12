@@ -1032,6 +1032,10 @@ table is used as the module prefix, so `sys_user_role.user_id` is detected as a
 reference to `sys_user.id_`. To reduce false positives, the inferred parent
 column must be a primary key and its database type must match the child column.
 
+The FMS fork is also published as `ghcr.io/wuweiflow/tbls-fms:latest`.
+See the [Chinese server deployment guide](deploy/README.zh-CN.md) for a
+Docker Hub-independent setup.
+
 
 ### Dictionary
 
