@@ -14,10 +14,16 @@ var (
 // Namer is a function type which is given a string and return a string.
 type Namer func(string) string
 
+// ContextNamer is a function type which is given a table and column name and returns a string.
+type ContextNamer func(string, string) string
+
 // NamingStrategy represents naming strategies.
 type NamingStrategy struct {
-	ParentTable  Namer
-	ParentColumn Namer
+	ParentTable            Namer
+	ParentTableWithContext ContextNamer
+	ParentColumn           Namer
+	RequireParentPK        bool
+	RequireSameType        bool
 }
 
 // SelectNamingStrategy sets the naming strategy.
@@ -54,6 +60,15 @@ func SelectNamingStrategy(name string) (*NamingStrategy, error) {
 			ParentColumn: singularTableParentColumnNamer,
 		}, nil
 
+	case "fms":
+		return &NamingStrategy{
+			ParentTable:            emptyParentTableNamer,
+			ParentTableWithContext: fmsParentTableNamer,
+			ParentColumn:           fmsParentColumnNamer,
+			RequireParentPK:        true,
+			RequireSameType:        true,
+		}, nil
+
 	default:
 		return nil, fmt.Errorf("naming strategy does not exist. strategy: %s", name)
 	}
@@ -62,6 +77,14 @@ func SelectNamingStrategy(name string) (*NamingStrategy, error) {
 // ParentTableName alters the given name by Table.
 func (ns *NamingStrategy) ParentTableName(name string) string {
 	return ns.ParentTable(name)
+}
+
+// ParentTableNameFor alters the given column name by using its table as context when supported.
+func (ns *NamingStrategy) ParentTableNameFor(tableName, columnName string) string {
+	if ns.ParentTableWithContext != nil {
+		return ns.ParentTableWithContext(tableName, columnName)
+	}
+	return ns.ParentTableName(columnName)
 }
 
 // ParentColumnName alters the given name by Column.
@@ -106,4 +129,32 @@ func invertedSingularTableParentTableNamer(name string) string {
 		return ""
 	}
 	return pluralizeClient.Singular(name[index+1:])
+}
+
+func emptyParentTableNamer(_ string) string {
+	return ""
+}
+
+// fmsParentTableNamer maps a module-scoped child reference such as
+// sr_order_hrs.order_id to the parent table sr_order.
+func fmsParentTableNamer(tableName, columnName string) string {
+	if !strings.HasSuffix(columnName, "_id") {
+		return ""
+	}
+
+	entityName := strings.TrimSuffix(columnName, "_id")
+	if entityName == "" {
+		return ""
+	}
+
+	moduleEnd := strings.Index(tableName, "_")
+	if moduleEnd <= 0 {
+		return ""
+	}
+
+	return tableName[:moduleEnd] + "_" + entityName
+}
+
+func fmsParentColumnNamer(_ string) string {
+	return "id_"
 }

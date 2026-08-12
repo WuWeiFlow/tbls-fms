@@ -793,7 +793,7 @@ func mergeDetectedRelations(s *schema.Schema, strategy *NamingStrategy) {
 				Table:   t,
 			}
 
-			if parentTable, err = s.FindTableByName(strategy.ParentTableName(c.Name)); err != nil {
+			if parentTable, err = s.FindTableByName(strategy.ParentTableNameFor(t.Name, c.Name)); err != nil {
 				continue
 			}
 
@@ -804,6 +804,15 @@ func mergeDetectedRelations(s *schema.Schema, strategy *NamingStrategy) {
 			relation.ParentTable = parentTable
 
 			if parentColumn, err = relation.ParentTable.FindColumnByName(strategy.ParentColumnName(c.Name)); err != nil {
+				continue
+			}
+
+			if strategy.RequireParentPK && !parentColumn.PK {
+				continue
+			}
+
+			if strategy.RequireSameType &&
+				!strings.EqualFold(strings.TrimSpace(c.Type), strings.TrimSpace(parentColumn.Type)) {
 				continue
 			}
 
