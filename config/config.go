@@ -784,9 +784,21 @@ func mergeDetectedRelations(s *schema.Schema, strategy *NamingStrategy) {
 		parentColumn *schema.Column
 		parentTable  *schema.Table
 	)
+	explicitRelationColumns := map[*schema.Column]struct{}{}
+	for _, relation := range s.Relations {
+		for _, column := range relation.Columns {
+			explicitRelationColumns[column] = struct{}{}
+		}
+	}
 
 	for _, t := range s.Tables {
 		for _, c := range t.Columns {
+			if _, exists := explicitRelationColumns[c]; exists {
+				// Relations loaded from the database or configured in relations: take
+				// precedence over heuristic detection for the same child column.
+				continue
+			}
+
 			relation := &schema.Relation{
 				Virtual: true,
 				Def:     "Detected Relation",

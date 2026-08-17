@@ -64,6 +64,28 @@ func TestLoadConfigFile(t *testing.T) {
 	}
 }
 
+func TestLoadFMSExampleConfig(t *testing.T) {
+	t.Setenv("TBLS_DSN", "my://user:password@localhost:3306/fms")
+	buf, err := os.ReadFile(filepath.Join("..", "deploy", "tbls.example.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	config, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := config.LoadConfig(buf); err != nil {
+		t.Fatal(err)
+	}
+
+	if got, want := config.DSN.URL, "my://user:password@localhost:3306/fms"; got != want {
+		t.Errorf("got DSN %q, want %q", got, want)
+	}
+	if !config.DetectVirtualRelations.Enabled || config.DetectVirtualRelations.Strategy != "fms" {
+		t.Errorf("unexpected virtual relation config: %#v", config.DetectVirtualRelations)
+	}
+}
+
 func TestDuplicateConfigFile(t *testing.T) {
 	config := &Config{
 		root: filepath.Join(testdataDir(), "config"),

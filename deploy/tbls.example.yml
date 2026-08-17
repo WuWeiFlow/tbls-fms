@@ -1,0 +1,53 @@
+---
+# tbls-fms 配置模板。复制为 .tbls.yml 后按实际数据库修改。
+
+# 建议通过环境变量提供连接信息，避免将密码提交到 Git。
+dsn: ${TBLS_DSN}
+docPath: docs/database
+
+# 符合 FMS 规则的关系会自动生成：
+# sr_order_hrs.order_id -> sr_order.id_
+detectVirtualRelations:
+  enabled: true
+  strategy: fms
+
+# 只有规则外、需要覆盖自动判断或带业务条件的关系才需要手动配置。
+# 手动关系按“子表 + 子字段”优先；同表其他字段仍会自动识别。
+relations:
+  # 非标准关系示例：字段名无法按 FMS 规则推导。
+  # - table: sr_order_hrs
+  #   columns: [legacy_order_no]
+  #   parentTable: sr_order
+  #   parentColumns: [order_no]
+  #   def: "MANUAL: legacy order number"
+
+  # 覆盖自动判断示例：order_id 应指向 legacy_order，而不是 sr_order。
+  # - table: sr_order_hrs
+  #   columns: [order_id]
+  #   parentTable: legacy_order
+  #   parentColumns: [id_]
+  #   def: "MANUAL: override FMS detection"
+
+  # 复合关系示例：columns 与 parentColumns 按位置一一对应。
+  # - table: sr_order_item
+  #   columns: [tenant_id, order_no]
+  #   parentTable: sr_order
+  #   parentColumns: [tenant_id, order_no]
+  #   def: "COMPOSITE: tenant + order number"
+
+  # 多态关系示例：tbls 只负责文档展示，不会执行 owner_type 条件。
+  # 应为同一字段分别配置可能的父表，并在 def 中写清判别条件。
+  # - table: biz_attachment
+  #   columns: [owner_id]
+  #   parentTable: sr_order
+  #   parentColumns: [id_]
+  #   def: "POLYMORPHIC: owner_type = ORDER"
+  # - table: biz_attachment
+  #   columns: [owner_id]
+  #   parentTable: crm_customer
+  #   parentColumns: [id_]
+  #   def: "POLYMORPHIC: owner_type = CUSTOMER"
+
+lint:
+  duplicateRelations:
+    enabled: true
