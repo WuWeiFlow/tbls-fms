@@ -180,3 +180,50 @@ func TestMergeDetectedRelations_FMS(t *testing.T) {
 		t.Errorf("unexpected parent relation: %s.%s", relation.ParentTable.Name, relation.ParentColumns[0].Name)
 	}
 }
+
+func TestMergeDetectedRelations_FMSExplicitRelationTakesPrecedence(t *testing.T) {
+	strategy, err := SelectNamingStrategy("fms")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	orderID := &schema.Column{Name: "id_", Type: "bigint", PK: true}
+	legacyOrderID := &schema.Column{Name: "id_", Type: "bigint", PK: true}
+	customerID := &schema.Column{Name: "id_", Type: "bigint", PK: true}
+	orderRef := &schema.Column{Name: "order_id", Type: "bigint"}
+	customerRef := &schema.Column{Name: "customer_id", Type: "bigint"}
+
+	orderTable := &schema.Table{Name: "sr_order", Columns: []*schema.Column{orderID}}
+	legacyOrderTable := &schema.Table{Name: "legacy_order", Columns: []*schema.Column{legacyOrderID}}
+	customerTable := &schema.Table{Name: "sr_customer", Columns: []*schema.Column{customerID}}
+	childTable := &schema.Table{Name: "sr_order_hrs", Columns: []*schema.Column{orderRef, customerRef}}
+	s := &schema.Schema{
+		Tables: []*schema.Table{orderTable, legacyOrderTable, customerTable, childTable},
+	}
+	if err := mergeAdditionalRelations(s, []AdditionalRelation{{
+		Table:         "sr_order_hrs",
+		Columns:       []string{"order_id"},
+		ParentTable:   "legacy_order",
+		ParentColumns: []string{"id_"},
+		Def:           "Manual Relation",
+	}}); err != nil {
+		t.Fatalf("failed to merge manual relation: %v", err)
+	}
+	manualRelation := s.Relations[0]
+
+	mergeDetectedRelations(s, strategy)
+
+	if len(s.Relations) != 2 {
+		t.Fatalf("got %d relations, want manual relation plus one detected relation", len(s.Relations))
+	}
+	if s.Relations[0] != manualRelation {
+		t.Fatal("manual relation was replaced")
+	}
+	detected := s.Relations[1]
+	if detected.Table != childTable || detected.Columns[0] != customerRef {
+		t.Fatalf("unexpected detected child relation: %s.%s", detected.Table.Name, detected.Columns[0].Name)
+	}
+	if detected.ParentTable != customerTable || detected.ParentColumns[0] != customerID {
+		t.Fatalf("unexpected detected parent relation: %s.%s", detected.ParentTable.Name, detected.ParentColumns[0].Name)
+	}
+}

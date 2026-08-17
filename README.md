@@ -1032,6 +1032,46 @@ table is used as the module prefix, so `sys_user_role.user_id` is detected as a
 reference to `sys_user.id_`. To reduce false positives, the inferred parent
 column must be a primary key and its database type must match the child column.
 
+Relations explicitly configured in `relations:` take precedence over automatic
+detection for the same child column. Other columns in the same table are still
+eligible for automatic detection. This allows an exceptional relation to be
+maintained manually without disabling the `fms` strategy for the whole table.
+
+```yaml
+detectVirtualRelations:
+  enabled: true
+  strategy: fms
+
+relations:
+  - table: sr_order_hrs
+    columns: [order_id]
+    parentTable: legacy_order
+    parentColumns: [id_]
+    def: "MANUAL: sr_order_hrs.order_id -> legacy_order.id_"
+```
+
+Polymorphic relations can be documented as multiple manual relations. Because
+tbls relations do not enforce or evaluate discriminator conditions, include the
+condition in `def` so the generated document does not imply an unconditional
+database foreign key.
+
+```yaml
+relations:
+  - table: biz_attachment
+    columns: [owner_id]
+    parentTable: sr_order
+    parentColumns: [id_]
+    def: "POLYMORPHIC: owner_type = ORDER"
+  - table: biz_attachment
+    columns: [owner_id]
+    parentTable: crm_customer
+    parentColumns: [id_]
+    def: "POLYMORPHIC: owner_type = CUSTOMER"
+```
+
+A commented FMS configuration template is available at
+[`deploy/tbls.example.yml`](deploy/tbls.example.yml).
+
 The FMS fork is also published as `ghcr.io/wuweiflow/tbls-fms:latest`.
 See the [Chinese server deployment guide](deploy/README.zh-CN.md) for a
 Docker Hub-independent setup.
