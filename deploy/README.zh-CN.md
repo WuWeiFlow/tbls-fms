@@ -47,7 +47,7 @@ cp compose.yml compose.yml.bak
 ```yaml
 services:
   tbls:
-    image: ghcr.io/wuweiflow/tbls-fms:latest
+    image: ghcr.io/wuweiflow/tbls-fms:v0.02
     env_file:
       - .env
     working_dir: /work
@@ -68,7 +68,7 @@ FMS 自动关系、手动指定关系、复合关系和多态关系示例。手�
 
 ## 四、拉取并运行
 
-首次部署以及以后更新程序时，执行：
+首次部署时执行：
 
 ```bash
 cd /root/db-doc
@@ -76,9 +76,13 @@ docker compose pull tbls
 docker compose run --rm tbls
 ```
 
-第一条命令从 GHCR 下载最新的 `tbls-fms` 镜像；第二条命令连接数据库并重新生成
+第一条命令从 GHCR 下载配置中指定版本的 `tbls-fms` 镜像；第二条命令连接数据库并重新生成
 文档。由于命令中包含 `--force`，`docs/` 中同名的 `schema.json`、`schema.svg` 和
 Markdown 文件会被新结果覆盖。
+
+生产环境推荐固定版本号。发布新版本后，先将 `compose.yml` 中的 `v0.02` 修改为
+新版本（例如 `v0.03`），再执行以上两条命令。若希望每次拉取都自动跟随最新版，
+也可以将镜像标签改回 `latest`。
 
 如果只想使用服务器当前已经下载的镜像，不检查更新，可以只执行：
 
