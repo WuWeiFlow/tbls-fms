@@ -1073,6 +1073,8 @@ A commented FMS configuration template is available at
 [`deploy/tbls.example.yml`](deploy/tbls.example.yml).
 
 The FMS fork is also published as `ghcr.io/wuweiflow/tbls-fms:latest`.
+Versioned Git tags publish matching image tags, for example
+`ghcr.io/wuweiflow/tbls-fms:v0.02`.
 See the [Chinese server deployment guide](deploy/README.zh-CN.md) for a
 Docker Hub-independent setup.
 

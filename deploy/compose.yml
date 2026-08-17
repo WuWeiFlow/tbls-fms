@@ -1,6 +1,6 @@
 services:
   tbls:
-    image: ghcr.io/wuweiflow/tbls-fms:latest
+    image: ghcr.io/wuweiflow/tbls-fms:v0.02
     env_file:
       - .env
     working_dir: /work
