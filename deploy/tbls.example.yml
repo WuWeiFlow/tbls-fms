@@ -7,12 +7,40 @@ docPath: docs/database
 
 # 符合 FMS 规则的关系会自动生成：
 # sr_order_hrs.order_id -> sr_order.id_
+# 唯一的跨模块表名后缀也会自动生成：
+# sr_order.asset_id -> eq_asset.id_
 detectVirtualRelations:
   enabled: true
   strategy: fms
 
-# 只有规则外、需要覆盖自动判断或带业务条件的关系才需要手动配置。
-# 手动关系按“子表 + 子字段”优先；同表其他字段仍会自动识别。
+  # 无法仅凭名称可靠推导、但会在多张表重复出现的关系写在 rules 中。
+  # tables 和 excludeTables 支持通配符；不写 tables 时匹配所有含该字段的表。
+  # 父字段必须是主键，且子字段与父字段的数据库类型必须一致。
+  rules:
+    - columns: [create_by, report_by, worker_id]
+      parentTable: pa_staff
+      parentColumn: id_
+      def: "MAPPED: staff"
+
+    - columns: [staff_team_id, work_team_id]
+      parentTable: org_staff_structure
+      parentColumn: id_
+      def: "MAPPED: staff structure"
+
+    - columns: [base_biz_type_id]
+      parentTable: sys_biz_type
+      parentColumn: id_
+      def: "MAPPED: business type"
+
+    # 可选的表范围示例：只匹配 sr_ 开头、且不是历史表的 category_id。
+    # - tables: [sr_*]
+    #   excludeTables: [sr_history_*]
+    #   columns: [category_id]
+    #   parentTable: sys_category
+    #   parentColumn: id_
+
+# 最终优先级：relations 手动指定 > rules 映射规则 > FMS 自动识别。
+# 同一张表中未被高优先级关系占用的其他字段，仍会继续按低优先级识别。
 relations:
   # 非标准关系示例：字段名无法按 FMS 规则推导。
   # - table: sr_order_hrs

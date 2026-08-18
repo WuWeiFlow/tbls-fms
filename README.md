@@ -1031,11 +1031,41 @@ The `fms` strategy is intended for module-prefixed tables whose primary key is
 table is used as the module prefix, so `sys_user_role.user_id` is detected as a
 reference to `sys_user.id_`. To reduce false positives, the inferred parent
 column must be a primary key and its database type must match the child column.
+If no valid same-module table exists, `fms` also accepts one unique table whose
+name ends with the referenced entity. For example, `sr_order.asset_id` can be
+detected as `eq_asset.id_`. If several valid suffix matches exist, no relation
+is generated because the result would be ambiguous.
 
-Relations explicitly configured in `relations:` take precedence over automatic
-detection for the same child column. Other columns in the same table are still
-eligible for automatic detection. This allows an exceptional relation to be
-maintained manually without disabling the `fms` strategy for the whole table.
+Recurring cross-module conventions that cannot be inferred from names can be
+configured once in `detectVirtualRelations.rules`. `tables` and
+`excludeTables` are optional wildcard scopes; without `tables`, the rule applies
+to every table containing one of the listed columns.
+
+```yaml
+detectVirtualRelations:
+  enabled: true
+  strategy: fms
+  rules:
+    - columns: [create_by, report_by, worker_id]
+      parentTable: pa_staff
+      parentColumn: id_
+    - columns: [staff_team_id, work_team_id]
+      parentTable: org_staff_structure
+      parentColumn: id_
+    - tables: [sr_*]
+      excludeTables: [sr_history_*]
+      columns: [base_biz_type_id]
+      parentTable: sys_biz_type
+      parentColumn: id_
+      def: "FMS business type mapping"
+```
+
+The priority for the same child column is:
+`relations:` (manual or polymorphic) > `detectVirtualRelations.rules` >
+automatic detection. Other columns in the same table remain eligible for lower
+priority rules. Mapping rules validate that the parent column is a primary key
+and that both column types match. Conflicting mapping rules fail the command so
+that an arbitrary relationship is never documented.
 
 ```yaml
 detectVirtualRelations:
@@ -1074,7 +1104,7 @@ A commented FMS configuration template is available at
 
 The FMS fork is also published as `ghcr.io/wuweiflow/tbls-fms:latest`.
 Versioned Git tags publish matching image tags, for example
-`ghcr.io/wuweiflow/tbls-fms:v0.02`.
+`ghcr.io/wuweiflow/tbls-fms:v0.03`.
 See the [Chinese server deployment guide](deploy/README.zh-CN.md) for a
 Docker Hub-independent setup.
 
