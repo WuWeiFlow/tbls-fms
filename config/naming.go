@@ -24,6 +24,7 @@ type NamingStrategy struct {
 	ParentColumn           Namer
 	RequireParentPK        bool
 	RequireSameType        bool
+	AllowUniqueTableSuffix bool
 }
 
 // SelectNamingStrategy sets the naming strategy.
@@ -67,6 +68,7 @@ func SelectNamingStrategy(name string) (*NamingStrategy, error) {
 			ParentColumn:           fmsParentColumnNamer,
 			RequireParentPK:        true,
 			RequireSameType:        true,
+			AllowUniqueTableSuffix: true,
 		}, nil
 
 	default:
@@ -138,11 +140,7 @@ func emptyParentTableNamer(_ string) string {
 // fmsParentTableNamer maps a module-scoped child reference such as
 // sr_order_hrs.order_id to the parent table sr_order.
 func fmsParentTableNamer(tableName, columnName string) string {
-	if !strings.HasSuffix(columnName, "_id") {
-		return ""
-	}
-
-	entityName := strings.TrimSuffix(columnName, "_id")
+	entityName := fmsEntityName(columnName)
 	if entityName == "" {
 		return ""
 	}
@@ -153,6 +151,13 @@ func fmsParentTableNamer(tableName, columnName string) string {
 	}
 
 	return tableName[:moduleEnd] + "_" + entityName
+}
+
+func fmsEntityName(columnName string) string {
+	if !strings.HasSuffix(columnName, "_id") {
+		return ""
+	}
+	return strings.TrimSuffix(columnName, "_id")
 }
 
 func fmsParentColumnNamer(_ string) string {

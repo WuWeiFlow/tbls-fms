@@ -84,6 +84,16 @@ func TestLoadFMSExampleConfig(t *testing.T) {
 	if !config.DetectVirtualRelations.Enabled || config.DetectVirtualRelations.Strategy != "fms" {
 		t.Errorf("unexpected virtual relation config: %#v", config.DetectVirtualRelations)
 	}
+	if got, want := len(config.DetectVirtualRelations.Rules), 3; got != want {
+		t.Fatalf("got %d virtual relation rules, want %d", got, want)
+	}
+	staffRule := config.DetectVirtualRelations.Rules[0]
+	if got, want := staffRule.Columns, []string{"create_by", "report_by", "worker_id"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("got columns %v, want %v", got, want)
+	}
+	if staffRule.ParentTable != "pa_staff" || staffRule.ParentColumn != "id_" {
+		t.Errorf("unexpected staff mapping rule: %#v", staffRule)
+	}
 }
 
 func TestDuplicateConfigFile(t *testing.T) {

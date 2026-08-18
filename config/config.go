@@ -122,8 +122,19 @@ type AdditionalComment struct {
 }
 
 type DetectVirtualRelations struct {
-	Enabled  bool   `yaml:"enabled,omitempty"`
-	Strategy string `yaml:"strategy,omitempty"`
+	Enabled  bool                  `yaml:"enabled,omitempty"`
+	Strategy string                `yaml:"strategy,omitempty"`
+	Rules    []VirtualRelationRule `yaml:"rules,omitempty"`
+}
+
+// VirtualRelationRule maps recurring child columns to one parent key.
+type VirtualRelationRule struct {
+	Tables        []string `yaml:"tables,omitempty"`
+	ExcludeTables []string `yaml:"excludeTables,omitempty"`
+	Columns       []string `yaml:"columns"`
+	ParentTable   string   `yaml:"parentTable"`
+	ParentColumn  string   `yaml:"parentColumn"`
+	Def           string   `yaml:"def,omitempty"`
 }
 
 // Option function change Config.
@@ -445,6 +456,17 @@ func (c *Config) ModifySchema(s *schema.Schema) error {
 	if err := c.MergeAdditionalData(s); err != nil {
 		return err
 	}
+	var strategy *NamingStrategy
+	if c.DetectVirtualRelations.Enabled {
+		var err error
+		strategy, err = SelectNamingStrategy(c.DetectVirtualRelations.Strategy)
+		if err != nil {
+			return err
+		}
+		if err := mergeVirtualRelationRules(s, c.DetectVirtualRelations.Rules); err != nil {
+			return err
+		}
+	}
 	if err := c.FilterTables(s); err != nil {
 		return err
 	}
@@ -454,10 +476,6 @@ func (c *Config) ModifySchema(s *schema.Schema) error {
 		}
 	}
 	if c.DetectVirtualRelations.Enabled {
-		strategy, err := SelectNamingStrategy(c.DetectVirtualRelations.Strategy)
-		if err != nil {
-			return err
-		}
 		mergeDetectedRelations(s, strategy)
 	}
 	c.mergeDictFromSchema(s)
@@ -559,6 +577,131 @@ func (c *Config) ModifySchema(s *schema.Schema) error {
 	}
 
 	return nil
+}
+
+func mergeVirtualRelationRules(s *schema.Schema, rules []VirtualRelationRule) error {
+	explicitRelationColumns := relationColumns(s.Relations)
+	mappedRelations := map[*schema.Column]*schema.Relation{}
+	orderedRelations := []*schema.Relation{}
+
+	for i, rule := range rules {
+		if len(rule.Columns) == 0 {
+			return fmt.Errorf("virtual relation rule %d: columns must not be empty", i+1)
+		}
+		if rule.ParentTable == "" || rule.ParentColumn == "" {
+			return fmt.Errorf("virtual relation rule %d: parentTable and parentColumn are required", i+1)
+		}
+
+		parentTable, err := s.FindTableByName(rule.ParentTable)
+		if err != nil {
+			return fmt.Errorf("virtual relation rule %d: %w", i+1, err)
+		}
+		parentColumn, err := parentTable.FindColumnByName(rule.ParentColumn)
+		if err != nil {
+			return fmt.Errorf("virtual relation rule %d: %w", i+1, err)
+		}
+		if !parentColumn.PK {
+			return fmt.Errorf("virtual relation rule %d: parent column %s.%s is not a primary key", i+1, parentTable.Name, parentColumn.Name)
+		}
+
+		matched := false
+		for _, table := range s.Tables {
+			if !virtualRelationRuleMatchesTable(s, rule, table.Name) {
+				continue
+			}
+			for _, columnName := range rule.Columns {
+				column, err := table.FindColumnByName(columnName)
+				if err != nil {
+					continue
+				}
+				matched = true
+				if table == parentTable {
+					continue
+				}
+				if _, exists := explicitRelationColumns[column]; exists {
+					// Database and relations: entries have the highest priority.
+					continue
+				}
+				if !sameColumnType(column, parentColumn) {
+					return fmt.Errorf("virtual relation rule %d: column type mismatch between %s.%s (%s) and %s.%s (%s)",
+						i+1, table.Name, column.Name, column.Type, parentTable.Name, parentColumn.Name, parentColumn.Type)
+				}
+
+				relation := &schema.Relation{
+					Table:         table,
+					Columns:       []*schema.Column{column},
+					ParentTable:   parentTable,
+					ParentColumns: []*schema.Column{parentColumn},
+					Def:           rule.Def,
+					Virtual:       true,
+				}
+				if relation.Def == "" {
+					relation.Def = "Mapped Relation"
+				}
+
+				if existing, exists := mappedRelations[column]; exists {
+					if existing.ParentTable != parentTable || existing.ParentColumns[0] != parentColumn {
+						return fmt.Errorf("conflicting virtual relation rules for %s.%s: %s.%s and %s.%s",
+							table.Name, column.Name,
+							existing.ParentTable.Name, existing.ParentColumns[0].Name,
+							parentTable.Name, parentColumn.Name)
+					}
+					continue
+				}
+
+				mappedRelations[column] = relation
+				orderedRelations = append(orderedRelations, relation)
+			}
+		}
+		if !matched {
+			return fmt.Errorf("virtual relation rule %d did not match any columns", i+1)
+		}
+	}
+
+	for _, relation := range orderedRelations {
+		column := relation.Columns[0]
+		parentColumn := relation.ParentColumns[0]
+		column.ParentRelations = append(column.ParentRelations, relation)
+		parentColumn.ChildRelations = append(parentColumn.ChildRelations, relation)
+		s.Relations = append(s.Relations, relation)
+	}
+	return nil
+}
+
+func virtualRelationRuleMatchesTable(s *schema.Schema, rule VirtualRelationRule, tableName string) bool {
+	normalizedTableName := s.NormalizeTableName(tableName)
+	if len(rule.Tables) > 0 {
+		matched := false
+		for _, pattern := range rule.Tables {
+			if wildcard.Match(s.NormalizeTableName(pattern), normalizedTableName) {
+				matched = true
+				break
+			}
+		}
+		if !matched {
+			return false
+		}
+	}
+	for _, pattern := range rule.ExcludeTables {
+		if wildcard.Match(s.NormalizeTableName(pattern), normalizedTableName) {
+			return false
+		}
+	}
+	return true
+}
+
+func relationColumns(relations []*schema.Relation) map[*schema.Column]struct{} {
+	columns := map[*schema.Column]struct{}{}
+	for _, relation := range relations {
+		for _, column := range relation.Columns {
+			columns[column] = struct{}{}
+		}
+	}
+	return columns
+}
+
+func sameColumnType(column, parentColumn *schema.Column) bool {
+	return strings.EqualFold(strings.TrimSpace(column.Type), strings.TrimSpace(parentColumn.Type))
 }
 
 // MergeAdditionalData merge relations: comments: to schema.Schema.
@@ -779,17 +922,7 @@ func mergeAdditionalComments(s *schema.Schema, comments []AdditionalComment) (er
 }
 
 func mergeDetectedRelations(s *schema.Schema, strategy *NamingStrategy) {
-	var (
-		err          error
-		parentColumn *schema.Column
-		parentTable  *schema.Table
-	)
-	explicitRelationColumns := map[*schema.Column]struct{}{}
-	for _, relation := range s.Relations {
-		for _, column := range relation.Columns {
-			explicitRelationColumns[column] = struct{}{}
-		}
-	}
+	explicitRelationColumns := relationColumns(s.Relations)
 
 	for _, t := range s.Tables {
 		for _, c := range t.Columns {
@@ -805,29 +938,12 @@ func mergeDetectedRelations(s *schema.Schema, strategy *NamingStrategy) {
 				Table:   t,
 			}
 
-			if parentTable, err = s.FindTableByName(strategy.ParentTableNameFor(t.Name, c.Name)); err != nil {
-				continue
-			}
-
-			if parentTable == t {
+			parentTable, parentColumn, ok := findDetectedRelationParent(s, t, c, strategy)
+			if !ok {
 				continue
 			}
 
 			relation.ParentTable = parentTable
-
-			if parentColumn, err = relation.ParentTable.FindColumnByName(strategy.ParentColumnName(c.Name)); err != nil {
-				continue
-			}
-
-			if strategy.RequireParentPK && !parentColumn.PK {
-				continue
-			}
-
-			if strategy.RequireSameType &&
-				!strings.EqualFold(strings.TrimSpace(c.Type), strings.TrimSpace(parentColumn.Type)) {
-				continue
-			}
-
 			relation.Columns = append(relation.Columns, c)
 			relation.ParentColumns = append(relation.ParentColumns, parentColumn)
 
@@ -841,6 +957,60 @@ func mergeDetectedRelations(s *schema.Schema, strategy *NamingStrategy) {
 			s.Relations = append(s.Relations, relation)
 		}
 	}
+}
+
+func findDetectedRelationParent(s *schema.Schema, childTable *schema.Table, childColumn *schema.Column, strategy *NamingStrategy) (*schema.Table, *schema.Column, bool) {
+	parentColumnName := strategy.ParentColumnName(childColumn.Name)
+	parentTable, err := s.FindTableByName(strategy.ParentTableNameFor(childTable.Name, childColumn.Name))
+	if err == nil && parentTable != childTable {
+		if parentColumn, err := parentTable.FindColumnByName(parentColumnName); err == nil && validDetectedParentColumn(childColumn, parentColumn, strategy) {
+			return parentTable, parentColumn, true
+		}
+	}
+
+	if !strategy.AllowUniqueTableSuffix {
+		return nil, nil, false
+	}
+	entityName := fmsEntityName(childColumn.Name)
+	if entityName == "" {
+		return nil, nil, false
+	}
+
+	var matchedTable *schema.Table
+	var matchedColumn *schema.Column
+	for _, candidate := range s.Tables {
+		if candidate == childTable {
+			continue
+		}
+		candidateName := candidate.Name
+		if index := strings.LastIndex(candidateName, "."); index >= 0 {
+			candidateName = candidateName[index+1:]
+		}
+		if !strings.HasSuffix(strings.ToLower(candidateName), "_"+strings.ToLower(entityName)) {
+			continue
+		}
+		parentColumn, err := candidate.FindColumnByName(parentColumnName)
+		if err != nil || !validDetectedParentColumn(childColumn, parentColumn, strategy) {
+			continue
+		}
+		if matchedTable != nil {
+			// Multiple valid cross-module candidates are ambiguous.
+			return nil, nil, false
+		}
+		matchedTable = candidate
+		matchedColumn = parentColumn
+	}
+	if matchedTable == nil {
+		return nil, nil, false
+	}
+	return matchedTable, matchedColumn, true
+}
+
+func validDetectedParentColumn(childColumn, parentColumn *schema.Column, strategy *NamingStrategy) bool {
+	if strategy.RequireParentPK && !parentColumn.PK {
+		return false
+	}
+	return !strategy.RequireSameType || sameColumnType(childColumn, parentColumn)
 }
 
 func matchLength(s []string, e string) (int, bool) {
