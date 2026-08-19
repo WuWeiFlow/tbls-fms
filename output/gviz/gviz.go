@@ -130,8 +130,9 @@ func Output(s *schema.Schema, c *config.Config, force bool) (e error) {
 		return errors.WithStack(err)
 	}
 
+	var compactSchema *schema.Schema
 	if c.ER.Compact.Enabled {
-		compact, err := config.CompactSchema(s, c.ER.Compact.MaxColumns)
+		compactSchema, err = config.CompactSchema(s, c.ER.Compact.MaxColumns)
 		if err != nil {
 			return errors.WithStack(err)
 		}
@@ -141,7 +142,7 @@ func Output(s *schema.Schema, c *config.Config, force bool) (e error) {
 		if err != nil {
 			return errors.WithStack(err)
 		}
-		if err := g.OutputSchema(f, compact); err != nil {
+		if err := g.OutputSchema(f, compactSchema); err != nil {
 			_ = f.Close()
 			return errors.WithStack(err)
 		}
@@ -151,7 +152,7 @@ func Output(s *schema.Schema, c *config.Config, force bool) (e error) {
 	}
 
 	// tables
-	for _, t := range s.Tables {
+	for tableIndex, t := range s.Tables {
 		targetPath, err := filepath.Abs(c.TableFilePath(t.Name, erFormat))
 		if err != nil {
 			return errors.WithStack(err)
@@ -171,6 +172,25 @@ func Output(s *schema.Schema, c *config.Config, force bool) (e error) {
 		}
 		if err := f.Close(); err != nil {
 			return errors.WithStack(err)
+		}
+
+		if c.ER.Compact.Enabled {
+			targetPath, err := filepath.Abs(c.TableCompactFilePath(t.Name, erFormat))
+			if err != nil {
+				return errors.WithStack(err)
+			}
+			fmt.Printf("%s\n", c.TableCompactFilePath(t.Name, erFormat))
+			f, err := os.OpenFile(targetPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644) // #nosec
+			if err != nil {
+				return errors.WithStack(err)
+			}
+			if err := g.OutputTable(f, compactSchema.Tables[tableIndex]); err != nil {
+				_ = f.Close()
+				return errors.WithStack(err)
+			}
+			if err := f.Close(); err != nil {
+				return errors.WithStack(err)
+			}
 		}
 	}
 

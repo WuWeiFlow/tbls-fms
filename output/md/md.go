@@ -97,7 +97,13 @@ func (m *Md) OutputTable(wr io.Writer, t *schema.Table) error {
 		}
 		templateData["erDiagram"] = fmt.Sprintf("```mermaid\n%s```", buf.String())
 	default:
-		templateData["erDiagram"] = fmt.Sprintf("![er](%s)", m.config.DocumentLink(t.Name, m.config.TableRelativePath(t.Name, m.config.ER.Format)))
+		if m.config.ER.Compact.Enabled {
+			templateData["erDiagram"] = fmt.Sprintf("[查看完整关系图](%s)\n\n![er](%s)",
+				m.config.DocumentLink(t.Name, m.config.TableRelativePath(t.Name, m.config.ER.Format)),
+				m.config.DocumentLink(t.Name, m.config.TableCompactRelativePath(t.Name, m.config.ER.Format)))
+		} else {
+			templateData["erDiagram"] = fmt.Sprintf("![er](%s)", m.config.DocumentLink(t.Name, m.config.TableRelativePath(t.Name, m.config.ER.Format)))
+		}
 	}
 
 	if err := tmpl.Execute(wr, templateData); err != nil {

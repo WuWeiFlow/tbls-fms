@@ -1248,13 +1248,20 @@ moduleViewpoints:
 An additional compact ER can keep primary and relation columns while limiting
 ordinary columns. The original `schema.svg` remains unchanged;
 `schema-compact.svg` is added and shown in README with a link to the full image.
-Viewpoints receive matching `-compact` images too. `maxColumns: 0` means only
-primary/relation columns, while a positive value adds the first N ordinary
-columns per table.
+Each table and viewpoint receives a matching `-compact` image too (for example,
+`sr_order.svg` and `sr_order-compact.svg`). Their Markdown pages show the
+compact image with a link to the full image.
+`maxColumns: 0` means only primary/relation columns, while a positive value
+adds the first N ordinary columns per table.
 
 ```yaml
 er:
   format: svg
+  relationLabel:
+    distance: 3.0  # move source-side labels away from table fields
+    angle: -90
+  nodeSep: 0.8     # horizontal spacing between nodes in the same rank
+  rankSep: 0.8     # vertical spacing between ranks
   compact:
     enabled: true
     maxColumns: 0

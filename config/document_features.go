@@ -155,9 +155,24 @@ func (c *Config) TableRelativePath(tableName, extension string) string {
 	return path.Join(directory, fileName)
 }
 
+// TableCompactRelativePath returns the compact ER path for one table.
+func (c *Config) TableCompactRelativePath(tableName, extension string) string {
+	fileName := tableName + "-compact." + extension
+	if !c.TableDirectories.Enabled {
+		return fileName
+	}
+	directory := safePathPart(c.tablePrefix(tableName), c.TableDirectories.Fallback)
+	return path.Join(directory, fileName)
+}
+
 // TableFilePath returns the filesystem path for one table artifact.
 func (c *Config) TableFilePath(tableName, extension string) string {
 	return filepath.Join(c.DocPath, filepath.FromSlash(c.TableRelativePath(tableName, extension)))
+}
+
+// TableCompactFilePath returns the filesystem path for one compact table ER.
+func (c *Config) TableCompactFilePath(tableName, extension string) string {
+	return filepath.Join(c.DocPath, filepath.FromSlash(c.TableCompactRelativePath(tableName, extension)))
 }
 
 // DocumentLink builds a Markdown link from a root or table document.

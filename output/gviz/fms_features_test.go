@@ -3,6 +3,7 @@ package gviz
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/k1LoW/tbls/config"
@@ -28,7 +29,7 @@ func TestOutputWritesCompactAndPrefixERFiles(t *testing.T) {
 	if err := Output(s, c, true); err != nil {
 		t.Fatal(err)
 	}
-	for _, relativePath := range []string{"schema.svg", "schema-compact.svg", "sr/sr_order.svg"} {
+	for _, relativePath := range []string{"schema.svg", "schema-compact.svg", "sr/sr_order.svg", "sr/sr_order-compact.svg"} {
 		info, err := os.Stat(filepath.Join(c.DocPath, filepath.FromSlash(relativePath)))
 		if err != nil {
 			t.Fatalf("missing %s: %v", relativePath, err)
@@ -36,5 +37,19 @@ func TestOutputWritesCompactAndPrefixERFiles(t *testing.T) {
 		if info.Size() == 0 {
 			t.Fatalf("empty %s", relativePath)
 		}
+	}
+	full, err := os.ReadFile(filepath.Join(c.DocPath, "sr", "sr_order.svg"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	compact, err := os.ReadFile(filepath.Join(c.DocPath, "sr", "sr_order-compact.svg"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(full), "remark") {
+		t.Fatal("full table ER should contain ordinary columns")
+	}
+	if strings.Contains(string(compact), "remark") || !strings.Contains(string(compact), "id_") {
+		t.Fatal("compact table ER should contain primary columns but omit ordinary columns")
 	}
 }
