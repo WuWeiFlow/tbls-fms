@@ -38,7 +38,7 @@ func TestVirtualRelationPriority(t *testing.T) {
 	}}); err != nil {
 		t.Fatal(err)
 	}
-	if err := mergeVirtualRelationRules(s, []VirtualRelationRule{
+	if _, err := mergeVirtualRelationRules(s, []VirtualRelationRule{
 		{Columns: []string{"asset_id"}, ParentTable: "eq_asset", ParentColumn: "id_"},
 		{Columns: []string{"create_by"}, ParentTable: "pa_staff", ParentColumn: "id_"},
 	}); err != nil {
@@ -64,7 +64,7 @@ func TestMergeVirtualRelationRulesConflict(t *testing.T) {
 		{Name: "sr_order", Columns: []*schema.Column{staffTeamRef}},
 	}}
 
-	err := mergeVirtualRelationRules(s, []VirtualRelationRule{
+	_, err := mergeVirtualRelationRules(s, []VirtualRelationRule{
 		{Columns: []string{"staff_team_id"}, ParentTable: "org_staff_structure", ParentColumn: "id_"},
 		{Columns: []string{"staff_team_id"}, ParentTable: "legacy_team", ParentColumn: "id_"},
 	})
@@ -92,7 +92,7 @@ func TestMergeVirtualRelationRulesPreservesManualPolymorphicRelations(t *testing
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if err := mergeVirtualRelationRules(s, []VirtualRelationRule{{
+	if _, err := mergeVirtualRelationRules(s, []VirtualRelationRule{{
 		Columns: []string{"owner_id"}, ParentTable: "eq_asset", ParentColumn: "id_",
 	}}); err != nil {
 		t.Fatal(err)
@@ -114,7 +114,7 @@ func TestMergeVirtualRelationRulesTableScope(t *testing.T) {
 		{Name: "sr_history_order", Columns: []*schema.Column{historyAssetRef}},
 	}}
 
-	if err := mergeVirtualRelationRules(s, []VirtualRelationRule{{
+	if _, err := mergeVirtualRelationRules(s, []VirtualRelationRule{{
 		Tables:        []string{"sr_*"},
 		ExcludeTables: []string{"sr_history_*"},
 		Columns:       []string{"asset_id"},
@@ -130,6 +130,34 @@ func TestMergeVirtualRelationRulesTableScope(t *testing.T) {
 	if s.Relations[0].Table.Name != "sr_order" {
 		t.Fatalf("unexpected scoped child table %s", s.Relations[0].Table.Name)
 	}
+}
+
+func TestMergeVirtualRelationRulesSkipsTypeMismatch(t *testing.T) {
+	staffID := &schema.Column{Name: "id_", Type: "bigint(20)", PK: true}
+	invalidCreateBy := &schema.Column{Name: "create_by", Type: "varchar(255)"}
+	validCreateBy := &schema.Column{Name: "create_by", Type: "bigint(20)"}
+	s := &schema.Schema{Tables: []*schema.Table{
+		{Name: "pa_staff", Columns: []*schema.Column{staffID}},
+		{Name: "fm_user_form_data", Columns: []*schema.Column{invalidCreateBy}},
+		{Name: "sr_order", Columns: []*schema.Column{validCreateBy}},
+	}}
+
+	warnings, err := mergeVirtualRelationRules(s, []VirtualRelationRule{{
+		Columns: []string{"create_by"}, ParentTable: "pa_staff", ParentColumn: "id_",
+	}})
+	if err != nil {
+		t.Fatalf("type mismatch must not stop generation: %v", err)
+	}
+	if got, want := len(warnings), 1; got != want {
+		t.Fatalf("got %d warnings, want %d", got, want)
+	}
+	if !strings.Contains(warnings[0], "column type mismatch between fm_user_form_data.create_by (varchar(255)) and pa_staff.id_ (bigint(20)); skipping relation") {
+		t.Fatalf("unexpected warning: %s", warnings[0])
+	}
+	if got, want := len(s.Relations), 1; got != want {
+		t.Fatalf("got %d relations, want valid matches to continue", got)
+	}
+	assertRelation(t, s, "create_by", "pa_staff", "Mapped Relation")
 }
 
 func TestMergeDetectedRelationsFMSCrossModuleUniqueSuffix(t *testing.T) {

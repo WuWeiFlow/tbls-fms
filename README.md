@@ -1064,8 +1064,10 @@ The priority for the same child column is:
 `relations:` (manual or polymorphic) > `detectVirtualRelations.rules` >
 automatic detection. Other columns in the same table remain eligible for lower
 priority rules. Mapping rules validate that the parent column is a primary key
-and that both column types match. Conflicting mapping rules fail the command so
-that an arbitrary relationship is never documented.
+and that both column types match. Missing targets, non-primary parent columns,
+unmatched columns, and type mismatches are skipped with a warning. Conflicting
+mapping rules still fail the command so that an arbitrary relationship is never
+documented.
 
 ```yaml
 detectVirtualRelations:
