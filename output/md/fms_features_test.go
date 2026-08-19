@@ -52,3 +52,37 @@ func TestOutputGroupsTableDocumentsByPrefix(t *testing.T) {
 		t.Fatalf("freshly generated prefix-directory docs should have no diff:\n%s", diff)
 	}
 }
+
+func TestDiffSchemaAndDocsDoesNotScanSubdirectoriesByDefault(t *testing.T) {
+	c, err := config.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	c.DocPath = t.TempDir()
+	c.ER.Skip = true
+	s := &schema.Schema{
+		Name: "test",
+		Tables: []*schema.Table{
+			{Name: "sr_order", Type: "table", Columns: []*schema.Column{{Name: "id_", Type: "bigint", PK: true}}},
+		},
+	}
+
+	if err := Output(s, c, true); err != nil {
+		t.Fatal(err)
+	}
+	unrelatedDir := filepath.Join(c.DocPath, "unrelated")
+	if err := os.MkdirAll(unrelatedDir, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(unrelatedDir, "notes.md"), []byte("unrelated"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	diff, err := DiffSchemaAndDocs(c.DocPath, s, c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if diff != "" {
+		t.Fatalf("nested Markdown should be ignored when tableDirectories is disabled:\n%s", diff)
+	}
+}

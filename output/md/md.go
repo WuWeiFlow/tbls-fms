@@ -449,13 +449,7 @@ func DiffSchemaAndDocs(docPath string, s *schema.Schema, c *config.Config) (stri
 	defer func() {
 		_ = docRoot.Close()
 	}()
-	err = fs.WalkDir(docRoot.FS(), ".", func(relativePath string, entry fs.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			if os.IsPermission(walkErr) {
-				return fs.SkipDir
-			}
-			return walkErr
-		}
+	diffRemovedMarkdown := func(relativePath string, entry fs.DirEntry) error {
 		if entry.IsDir() || filepath.Ext(entry.Name()) != ".md" {
 			return nil
 		}
@@ -480,7 +474,28 @@ func DiffSchemaAndDocs(docPath string, s *schema.Schema, c *config.Config) (stri
 			diff += text
 		}
 		return nil
-	})
+	}
+	if c.TableDirectories.Enabled {
+		err = fs.WalkDir(docRoot.FS(), ".", func(relativePath string, entry fs.DirEntry, walkErr error) error {
+			if walkErr != nil {
+				if os.IsPermission(walkErr) {
+					return fs.SkipDir
+				}
+				return walkErr
+			}
+			return diffRemovedMarkdown(relativePath, entry)
+		})
+	} else {
+		var entries []fs.DirEntry
+		entries, err = fs.ReadDir(docRoot.FS(), ".")
+		if err == nil {
+			for _, entry := range entries {
+				if err = diffRemovedMarkdown(entry.Name(), entry); err != nil {
+					break
+				}
+			}
+		}
+	}
 	if err != nil {
 		return "", errors.WithStack(err)
 	}
