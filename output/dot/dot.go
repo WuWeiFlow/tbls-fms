@@ -45,11 +45,15 @@ func (d *Dot) OutputSchema(wr io.Writer, s *schema.Schema) error {
 	}
 	tmpl := template.Must(template.New(s.Name).Funcs(output.Funcs(&d.config.MergedDict)).Parse(ts))
 	if err := tmpl.Execute(wr, map[string]interface{}{
-		"Name":        s.Name,
-		"Tables":      s.Tables,
-		"Relations":   s.Relations,
-		"showComment": d.config.ER.Comment,
-		"showDef":     !d.config.ER.HideDef,
+		"Name":                  s.Name,
+		"Tables":                s.Tables,
+		"Relations":             s.Relations,
+		"showComment":           d.config.ER.Comment,
+		"showDef":               !d.config.ER.HideDef,
+		"relationLabelDistance": d.config.ER.RelationLabel.Distance,
+		"relationLabelAngle":    d.config.ER.RelationLabel.Angle,
+		"nodeSep":               d.config.ER.NodeSep,
+		"rankSep":               d.config.ER.RankSep,
 	}); err != nil {
 		return errors.WithStack(err)
 	}
@@ -70,11 +74,15 @@ func (d *Dot) OutputTable(wr io.Writer, t *schema.Table) error {
 	}
 	tmpl := template.Must(template.New(t.Name).Funcs(output.Funcs(&d.config.MergedDict)).Parse(ts))
 	if err := tmpl.Execute(wr, map[string]interface{}{
-		"Table":       tables[0],
-		"Tables":      tables[1:],
-		"Relations":   relations,
-		"showComment": d.config.ER.Comment,
-		"showDef":     !d.config.ER.HideDef,
+		"Table":                 tables[0],
+		"Tables":                tables[1:],
+		"Relations":             relations,
+		"showComment":           d.config.ER.Comment,
+		"showDef":               !d.config.ER.HideDef,
+		"relationLabelDistance": d.config.ER.RelationLabel.Distance,
+		"relationLabelAngle":    d.config.ER.RelationLabel.Angle,
+		"nodeSep":               d.config.ER.NodeSep,
+		"rankSep":               d.config.ER.RankSep,
 	}); err != nil {
 		return errors.WithStack(err)
 	}
@@ -119,12 +127,16 @@ func (d *Dot) OutputViewpoint(wr io.Writer, v *schema.Viewpoint) error {
 
 	tmpl := template.Must(template.New(v.Name).Funcs(output.Funcs(&d.config.MergedDict)).Parse(ts))
 	if err := tmpl.Execute(wr, map[string]interface{}{
-		"Name":        v.Name,
-		"Tables":      tables,
-		"Relations":   v.Schema.Relations,
-		"Groups":      groups,
-		"showComment": d.config.ER.Comment,
-		"showDef":     !d.config.ER.HideDef,
+		"Name":                  v.Name,
+		"Tables":                tables,
+		"Relations":             v.Schema.Relations,
+		"Groups":                groups,
+		"showComment":           d.config.ER.Comment,
+		"showDef":               !d.config.ER.HideDef,
+		"relationLabelDistance": d.config.ER.RelationLabel.Distance,
+		"relationLabelAngle":    d.config.ER.RelationLabel.Angle,
+		"nodeSep":               d.config.ER.NodeSep,
+		"rankSep":               d.config.ER.RankSep,
 	}); err != nil {
 		return errors.WithStack(err)
 	}

@@ -99,12 +99,21 @@ type ER struct {
 	Distance        *int             `yaml:"distance,omitempty"`
 	Font            string           `yaml:"font,omitempty"`
 	Compact         CompactER        `yaml:"compact,omitempty"`
+	RelationLabel   RelationLabelER  `yaml:"relationLabel,omitempty"`
+	NodeSep         float64          `yaml:"nodeSep,omitempty"`
+	RankSep         float64          `yaml:"rankSep,omitempty"`
 }
 
 // CompactER controls the additional compact schema ER diagram.
 type CompactER struct {
 	Enabled    bool `yaml:"enabled,omitempty"`
 	MaxColumns int  `yaml:"maxColumns,omitempty"`
+}
+
+// RelationLabelER controls the source-side relation label offset in Graphviz ER diagrams.
+type RelationLabelER struct {
+	Distance float64 `yaml:"distance,omitempty"`
+	Angle    float64 `yaml:"angle,omitempty"`
 }
 
 // ModuleViewpoints controls viewpoints generated from table name prefixes.
@@ -386,6 +395,18 @@ func (c *Config) validate() error {
 	}
 	if c.ER.Compact.Enabled && c.ER.Format == "mermaid" {
 		return errors.New("er.compact is not supported when er.format is mermaid")
+	}
+	if c.ER.RelationLabel.Distance < 0 {
+		return errors.New("er.relationLabel.distance must be greater than or equal to 0")
+	}
+	if c.ER.RelationLabel.Angle < -180 || c.ER.RelationLabel.Angle > 180 {
+		return errors.New("er.relationLabel.angle must be between -180 and 180")
+	}
+	if c.ER.NodeSep < 0 {
+		return errors.New("er.nodeSep must be greater than or equal to 0")
+	}
+	if c.ER.RankSep < 0 {
+		return errors.New("er.rankSep must be greater than or equal to 0")
 	}
 	if c.ModuleViewpoints.Enabled && !lo.Contains([]string{"none", "parents", "all"}, c.ModuleViewpoints.CrossModule) {
 		return fmt.Errorf("moduleViewpoints.crossModule must be one of none, parents, all: %s", c.ModuleViewpoints.CrossModule)

@@ -1,8 +1,10 @@
 {{- $sc := .showComment -}}
 {{- $sd := .showDef -}}
+{{- $rld := .relationLabelDistance -}}
+{{- $rla := .relationLabelAngle -}}
 digraph "{{ .Name }}" {
   // Config
-  graph [rankdir=TB, layout=dot, fontname="Arial"];
+  graph [rankdir=TB, layout=dot, fontname="Arial"{{ if gt .nodeSep 0.0 }}, nodesep={{ .nodeSep }}{{ end }}{{ if gt .rankSep 0.0 }}, ranksep={{ .rankSep }}{{ end }}];
   node [shape=record, fontsize=14, margin=0.6, fontname="Arial"];
   edge [fontsize=10, labelfloat=false, splines=none, fontname="Arial"];
 
@@ -38,6 +40,6 @@ digraph "{{ .Name }}" {
   // Relations
   {{- range $j, $r := .Relations }}
   {{- if $r.HideForER }}{{ continue }}{{ end }}
-  "{{ $r.Table.Name }}":{{ $c := index $r.Columns 0 }}"{{ $c.Name }}" -> "{{ $r.ParentTable.Name }}":{{ $pc := index $r.ParentColumns 0 }}"{{ $pc.Name }}" [dir=back, arrowtail=crow, {{ if $r.Virtual }}style="dashed",{{ end }} taillabel=<<table cellpadding="5" border="0" cellborder="0"><tr><td>{{ if $sd }}{{ $r.Def | html }}{{ end }}</td></tr></table>>];
+  "{{ $r.Table.Name }}":{{ $c := index $r.Columns 0 }}"{{ $c.Name }}" -> "{{ $r.ParentTable.Name }}":{{ $pc := index $r.ParentColumns 0 }}"{{ $pc.Name }}" [dir=back, arrowtail=crow, {{ if $r.Virtual }}style="dashed",{{ end }}{{ if gt $rld 0.0 }} labeldistance={{ $rld }},{{ end }}{{ if ne $rla 0.0 }} labelangle={{ $rla }},{{ end }} taillabel=<<table cellpadding="5" border="0" cellborder="0"><tr><td>{{ if $sd }}{{ $r.Def | html }}{{ end }}</td></tr></table>>];
   {{- end }}
 }

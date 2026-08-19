@@ -26,6 +26,15 @@ func TestFMSExampleConfigDocumentsNewFeatures(t *testing.T) {
 	if !c.ER.Compact.Enabled || c.ModuleViewpoints.CrossModule != "parents" || !c.TableDirectories.Enabled {
 		t.Fatalf("new features are not enabled in example config: %#v", c)
 	}
+	if !c.ER.Comment {
+		t.Fatal("ER comments are not enabled in example config")
+	}
+	if c.Lint.DuplicateRelations.Enabled {
+		t.Fatal("duplicate relation lint should not be enabled by the example config")
+	}
+	if c.ER.RelationLabel.Distance != 3 || c.ER.RelationLabel.Angle != -90 || c.ER.NodeSep != 0.8 || c.ER.RankSep != 0.8 {
+		t.Fatalf("unexpected ER relation label layout: %#v", c.ER)
+	}
 	if c.DetectVirtualRelations.AutoRelationDef != "关联 {parentTable} 表（自动匹配）" {
 		t.Fatalf("unexpected auto relation definition: %q", c.DetectVirtualRelations.AutoRelationDef)
 	}
@@ -40,6 +49,31 @@ func TestRenderAutoRelationDef(t *testing.T) {
 	want := "sr_order.asset_id 关联 eq_asset.id_（自动匹配）"
 	if got != want {
 		t.Fatalf("got %q, want %q", got, want)
+	}
+}
+
+func TestValidateERRelationLabelLayout(t *testing.T) {
+	tests := []struct {
+		name   string
+		adjust func(*Config)
+	}{
+		{"negative distance", func(c *Config) { c.ER.RelationLabel.Distance = -1 }},
+		{"angle too small", func(c *Config) { c.ER.RelationLabel.Angle = -181 }},
+		{"angle too large", func(c *Config) { c.ER.RelationLabel.Angle = 181 }},
+		{"negative node separation", func(c *Config) { c.ER.NodeSep = -1 }},
+		{"negative rank separation", func(c *Config) { c.ER.RankSep = -1 }},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c, err := New()
+			if err != nil {
+				t.Fatal(err)
+			}
+			tt.adjust(c)
+			if err := c.validate(); err == nil {
+				t.Fatal("expected validation error")
+			}
+		})
 	}
 }
 
@@ -131,6 +165,9 @@ func TestTablePathsAndLinks(t *testing.T) {
 	}
 	c.TableDirectories = TableDirectories{Enabled: true, Separator: "_", Fallback: "other"}
 	if got, want := c.TableRelativePath("sr_order", "md"), "sr/sr_order.md"; got != want {
+		t.Fatalf("got %q, want %q", got, want)
+	}
+	if got, want := c.TableCompactRelativePath("sr_order", "svg"), "sr/sr_order-compact.svg"; got != want {
 		t.Fatalf("got %q, want %q", got, want)
 	}
 	if got, want := c.DocumentLink("sr_order", c.TableRelativePath("eq_asset", "md")), "../eq/eq_asset.md"; got != want {

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/k1LoW/tbls/config"
@@ -126,6 +127,32 @@ func TestOutputTable(t *testing.T) {
 				t.Error(diff)
 			}
 		})
+	}
+}
+
+func TestOutputTableRelationLabelOffset(t *testing.T) {
+	s := testutil.NewSchema(t)
+	c, err := config.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	c.ER.RelationLabel = config.RelationLabelER{Distance: 3, Angle: -90}
+	c.ER.NodeSep = 0.8
+	c.ER.RankSep = 0.8
+	if err := c.MergeAdditionalData(s); err != nil {
+		t.Fatal(err)
+	}
+
+	got := &bytes.Buffer{}
+	if err := New(c).OutputTable(got, s.Tables[0]); err != nil {
+		t.Fatal(err)
+	}
+	dot := got.String()
+	if !strings.Contains(dot, "nodesep=0.8, ranksep=0.8") {
+		t.Fatalf("missing graph spacing:\n%s", dot)
+	}
+	if !strings.Contains(dot, "labeldistance=3, labelangle=-90") {
+		t.Fatalf("missing relation label offset:\n%s", dot)
 	}
 }
 

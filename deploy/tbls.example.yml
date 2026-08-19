@@ -10,9 +10,21 @@ docPath: docs/database
 # ER 图同时保留完整版和简化版：
 # - schema.svg：完整图，保持 tbls 原有行为；
 # - schema-compact.svg：简化图；README 默认展示简化图，并提供完整图链接；
-# - Viewpoint 同样生成完整版和 *-compact.svg 简化版。
+# - 单表和 Viewpoint 同样生成完整版和 *-compact.svg 简化版，例如 sr_order.svg 和 sr_order-compact.svg；
+# - 单表 Markdown、README 和 Viewpoint Markdown 默认展示简化图，并提供完整图链接。
 er:
   format: svg
+  # 在 ER 图中显示数据库里的表注释和字段注释；false 或不配置时只显示名称和类型。
+  comment: true
+  # 关系说明继续放在子表字段附近，但沿关系线向表外偏移，避免覆盖字段内容。
+  # distance 是相对默认 10pt 的距离倍数；angle 控制相对关系线的偏移方向。
+  # 若仍有重叠，可先增大 distance，再适当增大 nodeSep/rankSep。
+  relationLabel:
+    distance: 3.0
+    angle: -90
+  # 同一层表之间、不同层表之间的间距（英寸）；值越大，图也越大。
+  nodeSep: 0.8
+  rankSep: 0.8
   compact:
     enabled: true
     # 简化图始终显示主键和所有关联字段，并额外显示每张表最前面的 N 个普通字段。
@@ -127,7 +139,3 @@ relations:
   #   parentTable: crm_customer
   #   parentColumns: [id_]
   #   def: "POLYMORPHIC: owner_type = CUSTOMER"
-
-lint:
-  duplicateRelations:
-    enabled: true

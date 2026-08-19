@@ -1,6 +1,7 @@
 package md
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"strings"
@@ -84,5 +85,35 @@ func TestDiffSchemaAndDocsDoesNotScanSubdirectoriesByDefault(t *testing.T) {
 	}
 	if diff != "" {
 		t.Fatalf("nested Markdown should be ignored when tableDirectories is disabled:\n%s", diff)
+	}
+}
+
+func TestOutputTableUsesCompactERWhenEnabled(t *testing.T) {
+	c, err := config.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	c.ER.Format = "svg"
+	c.ER.Compact = config.CompactER{Enabled: true, MaxColumns: 0}
+	c.TableDirectories = config.TableDirectories{Enabled: true, Separator: "_", Fallback: "other"}
+	table := &schema.Table{
+		Name: "sr_order",
+		Type: "table",
+		Columns: []*schema.Column{
+			{Name: "id_", Type: "bigint", PK: true},
+			{Name: "remark", Type: "text"},
+		},
+	}
+
+	buf := new(bytes.Buffer)
+	if err := New(c).OutputTable(buf, table); err != nil {
+		t.Fatal(err)
+	}
+	got := buf.String()
+	if !strings.Contains(got, "[查看完整关系图](sr_order.svg)") {
+		t.Fatalf("missing full ER link:\n%s", got)
+	}
+	if !strings.Contains(got, "![er](sr_order-compact.svg)") {
+		t.Fatalf("missing compact ER image:\n%s", got)
 	}
 }
