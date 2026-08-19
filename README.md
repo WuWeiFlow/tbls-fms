@@ -1069,6 +1069,10 @@ unmatched columns, and type mismatches are skipped with a warning. Conflicting
 mapping rules still fail the command so that an arbitrary relationship is never
 documented.
 
+After all three sources are merged, relations are stably grouped by child table
+in the generated schema. Relations for the same table stay together, while
+their source priority order remains manual, mapping rule, then automatic.
+
 ```yaml
 detectVirtualRelations:
   enabled: true

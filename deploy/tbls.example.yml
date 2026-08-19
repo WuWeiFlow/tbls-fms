@@ -42,6 +42,7 @@ detectVirtualRelations:
 
 # 最终优先级：relations 手动指定 > rules 映射规则 > FMS 自动识别。
 # 同一张表中未被高优先级关系占用的其他字段，仍会继续按低优先级识别。
+# 最终输出会按子表统一分组；同一张表内保持手动 > rules > 自动的顺序。
 relations:
   # 非标准关系示例：字段名无法按 FMS 规则推导。
   # - table: sr_order_hrs

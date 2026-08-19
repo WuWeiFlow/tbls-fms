@@ -5,6 +5,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	wildcard "github.com/IGLOU-EU/go-wildcard/v2"
@@ -474,13 +475,16 @@ func (c *Config) ModifySchema(s *schema.Schema) error {
 	if err := c.FilterTables(s); err != nil {
 		return err
 	}
+	if c.DetectVirtualRelations.Enabled {
+		mergeDetectedRelations(s, strategy)
+		if !c.Format.Sort {
+			sortRelationsByChildTable(s)
+		}
+	}
 	if c.Format.Sort {
 		if err := s.Sort(); err != nil {
 			return err
 		}
-	}
-	if c.DetectVirtualRelations.Enabled {
-		mergeDetectedRelations(s, strategy)
 	}
 	c.mergeDictFromSchema(s)
 	if err := detectCardinality(s); err != nil {
@@ -707,6 +711,12 @@ func relationColumns(relations []*schema.Relation) map[*schema.Column]struct{} {
 		}
 	}
 	return columns
+}
+
+func sortRelationsByChildTable(s *schema.Schema) {
+	sort.SliceStable(s.Relations, func(i, j int) bool {
+		return s.Relations[i].Table.Name < s.Relations[j].Table.Name
+	})
 }
 
 func sameColumnType(column, parentColumn *schema.Column) bool {

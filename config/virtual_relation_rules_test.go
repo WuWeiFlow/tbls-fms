@@ -160,6 +160,32 @@ func TestMergeVirtualRelationRulesSkipsTypeMismatch(t *testing.T) {
 	assertRelation(t, s, "create_by", "pa_staff", "Mapped Relation")
 }
 
+func TestSortRelationsByChildTablePreservesPriority(t *testing.T) {
+	fmTable := &schema.Table{Name: "fm_user_form_data"}
+	orderTable := &schema.Table{Name: "sr_order"}
+	s := &schema.Schema{Relations: []*schema.Relation{
+		{Table: orderTable, Def: "Manual Relation"},
+		{Table: fmTable, Def: "Detected Relation"},
+		{Table: orderTable, Def: "Mapped Relation"},
+		{Table: orderTable, Def: "Detected Relation"},
+	}}
+
+	sortRelationsByChildTable(s)
+
+	wantTables := []string{"fm_user_form_data", "sr_order", "sr_order", "sr_order"}
+	wantOrderDefs := []string{"Manual Relation", "Mapped Relation", "Detected Relation"}
+	for i, want := range wantTables {
+		if got := s.Relations[i].Table.Name; got != want {
+			t.Fatalf("relation %d table = %s, want %s", i, got, want)
+		}
+	}
+	for i, want := range wantOrderDefs {
+		if got := s.Relations[i+1].Def; got != want {
+			t.Fatalf("sr_order relation %d def = %s, want %s", i, got, want)
+		}
+	}
+}
+
 func TestMergeDetectedRelationsFMSCrossModuleUniqueSuffix(t *testing.T) {
 	strategy, err := SelectNamingStrategy("fms")
 	if err != nil {
