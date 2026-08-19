@@ -5,6 +5,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	wildcard "github.com/IGLOU-EU/go-wildcard/v2"
@@ -28,6 +29,8 @@ const DefaultERFormat = "svg"
 var SupportERFormat = []string{"png", "jpg", "svg", "mermaid"}
 
 const SchemaFileName = "schema.json"
+
+const VirtualRelationWarningsFileName = "virtual-relation-warnings.log"
 
 // DefaultERDistance is the default distance between tables that display relations in the ER.
 var DefaultERDistance = 1
@@ -463,20 +466,33 @@ func (c *Config) ModifySchema(s *schema.Schema) error {
 		if err != nil {
 			return err
 		}
-		if err := mergeVirtualRelationRules(s, c.DetectVirtualRelations.Rules); err != nil {
+		warnings, err := mergeVirtualRelationRules(s, c.DetectVirtualRelations.Rules)
+		for _, warning := range warnings {
+			fmt.Fprintf(os.Stderr, "警告：%s\n", warning)
+		}
+		warningLogPath, warningLogErr := c.writeVirtualRelationWarnings(warnings)
+		if warningLogErr != nil {
+			fmt.Fprintf(os.Stderr, "警告：无法写入虚拟关系告警日志：%v\n", warningLogErr)
+		} else if len(warnings) > 0 && warningLogPath != "" {
+			fmt.Fprintf(os.Stderr, "虚拟关系告警日志：%s\n", warningLogPath)
+		}
+		if err != nil {
 			return err
 		}
 	}
 	if err := c.FilterTables(s); err != nil {
 		return err
 	}
+	if c.DetectVirtualRelations.Enabled {
+		mergeDetectedRelations(s, strategy)
+		if !c.Format.Sort {
+			sortRelationsByChildTable(s)
+		}
+	}
 	if c.Format.Sort {
 		if err := s.Sort(); err != nil {
 			return err
 		}
-	}
-	if c.DetectVirtualRelations.Enabled {
-		mergeDetectedRelations(s, strategy)
 	}
 	c.mergeDictFromSchema(s)
 	if err := detectCardinality(s); err != nil {
@@ -579,29 +595,33 @@ func (c *Config) ModifySchema(s *schema.Schema) error {
 	return nil
 }
 
-func mergeVirtualRelationRules(s *schema.Schema, rules []VirtualRelationRule) error {
+func mergeVirtualRelationRules(s *schema.Schema, rules []VirtualRelationRule) ([]string, error) {
 	explicitRelationColumns := relationColumns(s.Relations)
 	mappedRelations := map[*schema.Column]*schema.Relation{}
 	orderedRelations := []*schema.Relation{}
+	warnings := []string{}
 
 	for i, rule := range rules {
 		if len(rule.Columns) == 0 {
-			return fmt.Errorf("virtual relation rule %d: columns must not be empty", i+1)
+			return warnings, fmt.Errorf("virtual relation rule %d: columns must not be empty", i+1)
 		}
 		if rule.ParentTable == "" || rule.ParentColumn == "" {
-			return fmt.Errorf("virtual relation rule %d: parentTable and parentColumn are required", i+1)
+			return warnings, fmt.Errorf("virtual relation rule %d: parentTable and parentColumn are required", i+1)
 		}
 
 		parentTable, err := s.FindTableByName(rule.ParentTable)
 		if err != nil {
-			return fmt.Errorf("virtual relation rule %d: %w", i+1, err)
+			warnings = append(warnings, fmt.Sprintf("虚拟关系规则 %d：未找到父表 %s，已跳过该规则", i+1, rule.ParentTable))
+			continue
 		}
 		parentColumn, err := parentTable.FindColumnByName(rule.ParentColumn)
 		if err != nil {
-			return fmt.Errorf("virtual relation rule %d: %w", i+1, err)
+			warnings = append(warnings, fmt.Sprintf("虚拟关系规则 %d：未找到父字段 %s.%s，已跳过该规则", i+1, parentTable.Name, rule.ParentColumn))
+			continue
 		}
 		if !parentColumn.PK {
-			return fmt.Errorf("virtual relation rule %d: parent column %s.%s is not a primary key", i+1, parentTable.Name, parentColumn.Name)
+			warnings = append(warnings, fmt.Sprintf("虚拟关系规则 %d：父字段 %s.%s 不是主键，已跳过该规则", i+1, parentTable.Name, parentColumn.Name))
+			continue
 		}
 
 		matched := false
@@ -623,8 +643,9 @@ func mergeVirtualRelationRules(s *schema.Schema, rules []VirtualRelationRule) er
 					continue
 				}
 				if !sameColumnType(column, parentColumn) {
-					return fmt.Errorf("virtual relation rule %d: column type mismatch between %s.%s (%s) and %s.%s (%s)",
-						i+1, table.Name, column.Name, column.Type, parentTable.Name, parentColumn.Name, parentColumn.Type)
+					warnings = append(warnings, fmt.Sprintf("虚拟关系规则 %d：字段类型不匹配：%s.%s（%s）与 %s.%s（%s），已跳过该关系",
+						i+1, table.Name, column.Name, column.Type, parentTable.Name, parentColumn.Name, parentColumn.Type))
+					continue
 				}
 
 				relation := &schema.Relation{
@@ -641,7 +662,7 @@ func mergeVirtualRelationRules(s *schema.Schema, rules []VirtualRelationRule) er
 
 				if existing, exists := mappedRelations[column]; exists {
 					if existing.ParentTable != parentTable || existing.ParentColumns[0] != parentColumn {
-						return fmt.Errorf("conflicting virtual relation rules for %s.%s: %s.%s and %s.%s",
+						return warnings, fmt.Errorf("conflicting virtual relation rules for %s.%s: %s.%s and %s.%s",
 							table.Name, column.Name,
 							existing.ParentTable.Name, existing.ParentColumns[0].Name,
 							parentTable.Name, parentColumn.Name)
@@ -654,7 +675,7 @@ func mergeVirtualRelationRules(s *schema.Schema, rules []VirtualRelationRule) er
 			}
 		}
 		if !matched {
-			return fmt.Errorf("virtual relation rule %d did not match any columns", i+1)
+			warnings = append(warnings, fmt.Sprintf("虚拟关系规则 %d：未匹配到任何字段，已跳过该规则", i+1))
 		}
 	}
 
@@ -665,7 +686,7 @@ func mergeVirtualRelationRules(s *schema.Schema, rules []VirtualRelationRule) er
 		parentColumn.ChildRelations = append(parentColumn.ChildRelations, relation)
 		s.Relations = append(s.Relations, relation)
 	}
-	return nil
+	return warnings, nil
 }
 
 func virtualRelationRuleMatchesTable(s *schema.Schema, rule VirtualRelationRule, tableName string) bool {
@@ -698,6 +719,36 @@ func relationColumns(relations []*schema.Relation) map[*schema.Column]struct{} {
 		}
 	}
 	return columns
+}
+
+func sortRelationsByChildTable(s *schema.Schema) {
+	sort.SliceStable(s.Relations, func(i, j int) bool {
+		return s.Relations[i].Table.Name < s.Relations[j].Table.Name
+	})
+}
+
+func (c *Config) writeVirtualRelationWarnings(warnings []string) (string, error) {
+	if c.DocPath == "" {
+		return "", nil
+	}
+
+	logDir := filepath.Dir(filepath.Clean(c.DocPath))
+	if err := os.MkdirAll(logDir, 0o755); err != nil {
+		return "", err
+	}
+	logPath := filepath.Join(logDir, VirtualRelationWarningsFileName)
+	lines := make([]string, 0, len(warnings))
+	for _, warning := range warnings {
+		lines = append(lines, "警告："+warning)
+	}
+	content := ""
+	if len(lines) > 0 {
+		content = strings.Join(lines, "\n") + "\n"
+	}
+	if err := os.WriteFile(logPath, []byte(content), 0o644); err != nil {
+		return "", err
+	}
+	return logPath, nil
 }
 
 func sameColumnType(column, parentColumn *schema.Column) bool {

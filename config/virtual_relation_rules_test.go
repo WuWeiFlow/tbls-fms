@@ -1,6 +1,8 @@
 package config
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -38,7 +40,7 @@ func TestVirtualRelationPriority(t *testing.T) {
 	}}); err != nil {
 		t.Fatal(err)
 	}
-	if err := mergeVirtualRelationRules(s, []VirtualRelationRule{
+	if _, err := mergeVirtualRelationRules(s, []VirtualRelationRule{
 		{Columns: []string{"asset_id"}, ParentTable: "eq_asset", ParentColumn: "id_"},
 		{Columns: []string{"create_by"}, ParentTable: "pa_staff", ParentColumn: "id_"},
 	}); err != nil {
@@ -64,7 +66,7 @@ func TestMergeVirtualRelationRulesConflict(t *testing.T) {
 		{Name: "sr_order", Columns: []*schema.Column{staffTeamRef}},
 	}}
 
-	err := mergeVirtualRelationRules(s, []VirtualRelationRule{
+	_, err := mergeVirtualRelationRules(s, []VirtualRelationRule{
 		{Columns: []string{"staff_team_id"}, ParentTable: "org_staff_structure", ParentColumn: "id_"},
 		{Columns: []string{"staff_team_id"}, ParentTable: "legacy_team", ParentColumn: "id_"},
 	})
@@ -92,7 +94,7 @@ func TestMergeVirtualRelationRulesPreservesManualPolymorphicRelations(t *testing
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if err := mergeVirtualRelationRules(s, []VirtualRelationRule{{
+	if _, err := mergeVirtualRelationRules(s, []VirtualRelationRule{{
 		Columns: []string{"owner_id"}, ParentTable: "eq_asset", ParentColumn: "id_",
 	}}); err != nil {
 		t.Fatal(err)
@@ -114,7 +116,7 @@ func TestMergeVirtualRelationRulesTableScope(t *testing.T) {
 		{Name: "sr_history_order", Columns: []*schema.Column{historyAssetRef}},
 	}}
 
-	if err := mergeVirtualRelationRules(s, []VirtualRelationRule{{
+	if _, err := mergeVirtualRelationRules(s, []VirtualRelationRule{{
 		Tables:        []string{"sr_*"},
 		ExcludeTables: []string{"sr_history_*"},
 		Columns:       []string{"asset_id"},
@@ -129,6 +131,97 @@ func TestMergeVirtualRelationRulesTableScope(t *testing.T) {
 	}
 	if s.Relations[0].Table.Name != "sr_order" {
 		t.Fatalf("unexpected scoped child table %s", s.Relations[0].Table.Name)
+	}
+}
+
+func TestMergeVirtualRelationRulesSkipsTypeMismatch(t *testing.T) {
+	staffID := &schema.Column{Name: "id_", Type: "bigint(20)", PK: true}
+	invalidCreateBy := &schema.Column{Name: "create_by", Type: "varchar(255)"}
+	validCreateBy := &schema.Column{Name: "create_by", Type: "bigint(20)"}
+	s := &schema.Schema{Tables: []*schema.Table{
+		{Name: "pa_staff", Columns: []*schema.Column{staffID}},
+		{Name: "fm_user_form_data", Columns: []*schema.Column{invalidCreateBy}},
+		{Name: "sr_order", Columns: []*schema.Column{validCreateBy}},
+	}}
+
+	warnings, err := mergeVirtualRelationRules(s, []VirtualRelationRule{{
+		Columns: []string{"create_by"}, ParentTable: "pa_staff", ParentColumn: "id_",
+	}})
+	if err != nil {
+		t.Fatalf("type mismatch must not stop generation: %v", err)
+	}
+	if got, want := len(warnings), 1; got != want {
+		t.Fatalf("got %d warnings, want %d", got, want)
+	}
+	if !strings.Contains(warnings[0], "字段类型不匹配：fm_user_form_data.create_by（varchar(255)）与 pa_staff.id_（bigint(20)），已跳过该关系") {
+		t.Fatalf("unexpected warning: %s", warnings[0])
+	}
+	if got, want := len(s.Relations), 1; got != want {
+		t.Fatalf("got %d relations, want valid matches to continue", got)
+	}
+	assertRelation(t, s, "create_by", "pa_staff", "Mapped Relation")
+}
+
+func TestSortRelationsByChildTablePreservesPriority(t *testing.T) {
+	fmTable := &schema.Table{Name: "fm_user_form_data"}
+	orderTable := &schema.Table{Name: "sr_order"}
+	s := &schema.Schema{Relations: []*schema.Relation{
+		{Table: orderTable, Def: "Manual Relation"},
+		{Table: fmTable, Def: "Detected Relation"},
+		{Table: orderTable, Def: "Mapped Relation"},
+		{Table: orderTable, Def: "Detected Relation"},
+	}}
+
+	sortRelationsByChildTable(s)
+
+	wantTables := []string{"fm_user_form_data", "sr_order", "sr_order", "sr_order"}
+	wantOrderDefs := []string{"Manual Relation", "Mapped Relation", "Detected Relation"}
+	for i, want := range wantTables {
+		if got := s.Relations[i].Table.Name; got != want {
+			t.Fatalf("relation %d table = %s, want %s", i, got, want)
+		}
+	}
+	for i, want := range wantOrderDefs {
+		if got := s.Relations[i+1].Def; got != want {
+			t.Fatalf("sr_order relation %d def = %s, want %s", i, got, want)
+		}
+	}
+}
+
+func TestWriteVirtualRelationWarnings(t *testing.T) {
+	baseDir := t.TempDir()
+	c := &Config{DocPath: filepath.Join(baseDir, "docs", "database")}
+	warnings := []string{
+		"虚拟关系规则 1：字段类型不匹配，已跳过该关系",
+		"虚拟关系规则 2：未找到父表 pa_staff，已跳过该规则",
+	}
+
+	logPath, err := c.writeVirtualRelationWarnings(warnings)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantPath := filepath.Join(baseDir, "docs", VirtualRelationWarningsFileName)
+	if logPath != wantPath {
+		t.Fatalf("log path = %s, want %s", logPath, wantPath)
+	}
+	content, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantContent := "警告：" + strings.Join(warnings, "\n警告：") + "\n"
+	if string(content) != wantContent {
+		t.Fatalf("log content = %q, want %q", content, wantContent)
+	}
+
+	if _, err := c.writeVirtualRelationWarnings(nil); err != nil {
+		t.Fatal(err)
+	}
+	content, err = os.ReadFile(logPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(content) != 0 {
+		t.Fatalf("warning log must be empty when the latest run has no warnings: %q", content)
 	}
 }
 

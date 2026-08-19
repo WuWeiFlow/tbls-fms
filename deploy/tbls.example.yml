@@ -4,6 +4,8 @@
 # 建议通过环境变量提供连接信息，避免将密码提交到 Git。
 dsn: ${TBLS_DSN}
 docPath: docs/database
+# 虚拟关系告警会同时输出到控制台和 docs/virtual-relation-warnings.log。
+# 日志位于 docPath 目录的同级，并在每次执行时覆盖。
 
 # 符合 FMS 规则的关系会自动生成：
 # sr_order_hrs.order_id -> sr_order.id_
@@ -16,6 +18,7 @@ detectVirtualRelations:
   # 无法仅凭名称可靠推导、但会在多张表重复出现的关系写在 rules 中。
   # tables 和 excludeTables 支持通配符；不写 tables 时匹配所有含该字段的表。
   # 父字段必须是主键，且子字段与父字段的数据库类型必须一致。
+  # 不符合条件的单条关系会跳过并输出中文警告，不会中断整次文档生成。
   rules:
     - columns: [create_by, report_by, worker_id]
       parentTable: pa_staff
@@ -41,6 +44,7 @@ detectVirtualRelations:
 
 # 最终优先级：relations 手动指定 > rules 映射规则 > FMS 自动识别。
 # 同一张表中未被高优先级关系占用的其他字段，仍会继续按低优先级识别。
+# 最终输出会按子表统一分组；同一张表内保持手动 > rules > 自动的顺序。
 relations:
   # 非标准关系示例：字段名无法按 FMS 规则推导。
   # - table: sr_order_hrs

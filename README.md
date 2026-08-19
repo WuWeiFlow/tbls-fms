@@ -1064,8 +1064,20 @@ The priority for the same child column is:
 `relations:` (manual or polymorphic) > `detectVirtualRelations.rules` >
 automatic detection. Other columns in the same table remain eligible for lower
 priority rules. Mapping rules validate that the parent column is a primary key
-and that both column types match. Conflicting mapping rules fail the command so
-that an arbitrary relationship is never documented.
+and that both column types match. Missing targets, non-primary parent columns,
+unmatched columns, and type mismatches are skipped with a warning. Conflicting
+mapping rules still fail the command so that an arbitrary relationship is never
+documented.
+
+After all three sources are merged, relations are stably grouped by child table
+in the generated schema. Relations for the same table stay together, while
+their source priority order remains manual, mapping rule, then automatic.
+
+Skipped virtual relation warnings are printed to the console and written to
+`virtual-relation-warnings.log` next to the configured `docPath` directory. For
+example, `docPath: docs/database` writes `docs/virtual-relation-warnings.log`.
+The file is replaced on every run, including an empty file when no warnings are
+detected.
 
 ```yaml
 detectVirtualRelations:
@@ -1104,7 +1116,7 @@ A commented FMS configuration template is available at
 
 The FMS fork is also published as `ghcr.io/wuweiflow/tbls-fms:latest`.
 Versioned Git tags publish matching image tags, for example
-`ghcr.io/wuweiflow/tbls-fms:v0.03`.
+`ghcr.io/wuweiflow/tbls-fms:v0.04`.
 See the [Chinese server deployment guide](deploy/README.zh-CN.md) for a
 Docker Hub-independent setup.
 
