@@ -30,6 +30,8 @@ var SupportERFormat = []string{"png", "jpg", "svg", "mermaid"}
 
 const SchemaFileName = "schema.json"
 
+const VirtualRelationWarningsFileName = "virtual-relation-warnings.log"
+
 // DefaultERDistance is the default distance between tables that display relations in the ER.
 var DefaultERDistance = 1
 
@@ -468,6 +470,12 @@ func (c *Config) ModifySchema(s *schema.Schema) error {
 		for _, warning := range warnings {
 			fmt.Fprintf(os.Stderr, "警告：%s\n", warning)
 		}
+		warningLogPath, warningLogErr := c.writeVirtualRelationWarnings(warnings)
+		if warningLogErr != nil {
+			fmt.Fprintf(os.Stderr, "警告：无法写入虚拟关系告警日志：%v\n", warningLogErr)
+		} else if len(warnings) > 0 && warningLogPath != "" {
+			fmt.Fprintf(os.Stderr, "虚拟关系告警日志：%s\n", warningLogPath)
+		}
 		if err != nil {
 			return err
 		}
@@ -717,6 +725,30 @@ func sortRelationsByChildTable(s *schema.Schema) {
 	sort.SliceStable(s.Relations, func(i, j int) bool {
 		return s.Relations[i].Table.Name < s.Relations[j].Table.Name
 	})
+}
+
+func (c *Config) writeVirtualRelationWarnings(warnings []string) (string, error) {
+	if c.DocPath == "" {
+		return "", nil
+	}
+
+	logDir := filepath.Dir(filepath.Clean(c.DocPath))
+	if err := os.MkdirAll(logDir, 0o755); err != nil {
+		return "", err
+	}
+	logPath := filepath.Join(logDir, VirtualRelationWarningsFileName)
+	lines := make([]string, 0, len(warnings))
+	for _, warning := range warnings {
+		lines = append(lines, "警告："+warning)
+	}
+	content := ""
+	if len(lines) > 0 {
+		content = strings.Join(lines, "\n") + "\n"
+	}
+	if err := os.WriteFile(logPath, []byte(content), 0o644); err != nil {
+		return "", err
+	}
+	return logPath, nil
 }
 
 func sameColumnType(column, parentColumn *schema.Column) bool {

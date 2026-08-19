@@ -1,6 +1,8 @@
 package config
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -183,6 +185,43 @@ func TestSortRelationsByChildTablePreservesPriority(t *testing.T) {
 		if got := s.Relations[i+1].Def; got != want {
 			t.Fatalf("sr_order relation %d def = %s, want %s", i, got, want)
 		}
+	}
+}
+
+func TestWriteVirtualRelationWarnings(t *testing.T) {
+	baseDir := t.TempDir()
+	c := &Config{DocPath: filepath.Join(baseDir, "docs", "database")}
+	warnings := []string{
+		"虚拟关系规则 1：字段类型不匹配，已跳过该关系",
+		"虚拟关系规则 2：未找到父表 pa_staff，已跳过该规则",
+	}
+
+	logPath, err := c.writeVirtualRelationWarnings(warnings)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantPath := filepath.Join(baseDir, "docs", VirtualRelationWarningsFileName)
+	if logPath != wantPath {
+		t.Fatalf("log path = %s, want %s", logPath, wantPath)
+	}
+	content, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantContent := "警告：" + strings.Join(warnings, "\n警告：") + "\n"
+	if string(content) != wantContent {
+		t.Fatalf("log content = %q, want %q", content, wantContent)
+	}
+
+	if _, err := c.writeVirtualRelationWarnings(nil); err != nil {
+		t.Fatal(err)
+	}
+	content, err = os.ReadFile(logPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(content) != 0 {
+		t.Fatalf("warning log must be empty when the latest run has no warnings: %q", content)
 	}
 }
 

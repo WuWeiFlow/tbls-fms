@@ -4,6 +4,8 @@
 # 建议通过环境变量提供连接信息，避免将密码提交到 Git。
 dsn: ${TBLS_DSN}
 docPath: docs/database
+# 虚拟关系告警会同时输出到控制台和 docs/virtual-relation-warnings.log。
+# 日志位于 docPath 目录的同级，并在每次执行时覆盖。
 
 # 符合 FMS 规则的关系会自动生成：
 # sr_order_hrs.order_id -> sr_order.id_

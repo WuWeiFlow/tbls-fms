@@ -1073,6 +1073,12 @@ After all three sources are merged, relations are stably grouped by child table
 in the generated schema. Relations for the same table stay together, while
 their source priority order remains manual, mapping rule, then automatic.
 
+Skipped virtual relation warnings are printed to the console and written to
+`virtual-relation-warnings.log` next to the configured `docPath` directory. For
+example, `docPath: docs/database` writes `docs/virtual-relation-warnings.log`.
+The file is replaced on every run, including an empty file when no warnings are
+detected.
+
 ```yaml
 detectVirtualRelations:
   enabled: true
