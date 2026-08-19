@@ -151,7 +151,7 @@ func TestMergeVirtualRelationRulesSkipsTypeMismatch(t *testing.T) {
 	if got, want := len(warnings), 1; got != want {
 		t.Fatalf("got %d warnings, want %d", got, want)
 	}
-	if !strings.Contains(warnings[0], "column type mismatch between fm_user_form_data.create_by (varchar(255)) and pa_staff.id_ (bigint(20)); skipping relation") {
+	if !strings.Contains(warnings[0], "字段类型不匹配：fm_user_form_data.create_by（varchar(255)）与 pa_staff.id_（bigint(20)），已跳过该关系") {
 		t.Fatalf("unexpected warning: %s", warnings[0])
 	}
 	if got, want := len(s.Relations), 1; got != want {

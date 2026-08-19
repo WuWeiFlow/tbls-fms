@@ -465,7 +465,7 @@ func (c *Config) ModifySchema(s *schema.Schema) error {
 		}
 		warnings, err := mergeVirtualRelationRules(s, c.DetectVirtualRelations.Rules)
 		for _, warning := range warnings {
-			fmt.Fprintf(os.Stderr, "WARN: %s\n", warning)
+			fmt.Fprintf(os.Stderr, "警告：%s\n", warning)
 		}
 		if err != nil {
 			return err
@@ -599,16 +599,16 @@ func mergeVirtualRelationRules(s *schema.Schema, rules []VirtualRelationRule) ([
 
 		parentTable, err := s.FindTableByName(rule.ParentTable)
 		if err != nil {
-			warnings = append(warnings, fmt.Sprintf("virtual relation rule %d: parent table %s was not found; skipping rule", i+1, rule.ParentTable))
+			warnings = append(warnings, fmt.Sprintf("虚拟关系规则 %d：未找到父表 %s，已跳过该规则", i+1, rule.ParentTable))
 			continue
 		}
 		parentColumn, err := parentTable.FindColumnByName(rule.ParentColumn)
 		if err != nil {
-			warnings = append(warnings, fmt.Sprintf("virtual relation rule %d: parent column %s.%s was not found; skipping rule", i+1, parentTable.Name, rule.ParentColumn))
+			warnings = append(warnings, fmt.Sprintf("虚拟关系规则 %d：未找到父字段 %s.%s，已跳过该规则", i+1, parentTable.Name, rule.ParentColumn))
 			continue
 		}
 		if !parentColumn.PK {
-			warnings = append(warnings, fmt.Sprintf("virtual relation rule %d: parent column %s.%s is not a primary key; skipping rule", i+1, parentTable.Name, parentColumn.Name))
+			warnings = append(warnings, fmt.Sprintf("虚拟关系规则 %d：父字段 %s.%s 不是主键，已跳过该规则", i+1, parentTable.Name, parentColumn.Name))
 			continue
 		}
 
@@ -631,7 +631,7 @@ func mergeVirtualRelationRules(s *schema.Schema, rules []VirtualRelationRule) ([
 					continue
 				}
 				if !sameColumnType(column, parentColumn) {
-					warnings = append(warnings, fmt.Sprintf("virtual relation rule %d: column type mismatch between %s.%s (%s) and %s.%s (%s); skipping relation",
+					warnings = append(warnings, fmt.Sprintf("虚拟关系规则 %d：字段类型不匹配：%s.%s（%s）与 %s.%s（%s），已跳过该关系",
 						i+1, table.Name, column.Name, column.Type, parentTable.Name, parentColumn.Name, parentColumn.Type))
 					continue
 				}
@@ -663,7 +663,7 @@ func mergeVirtualRelationRules(s *schema.Schema, rules []VirtualRelationRule) ([
 			}
 		}
 		if !matched {
-			warnings = append(warnings, fmt.Sprintf("virtual relation rule %d did not match any columns; skipping rule", i+1))
+			warnings = append(warnings, fmt.Sprintf("虚拟关系规则 %d：未匹配到任何字段，已跳过该规则", i+1))
 		}
 	}
 

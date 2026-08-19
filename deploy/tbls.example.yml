@@ -16,7 +16,7 @@ detectVirtualRelations:
   # 无法仅凭名称可靠推导、但会在多张表重复出现的关系写在 rules 中。
   # tables 和 excludeTables 支持通配符；不写 tables 时匹配所有含该字段的表。
   # 父字段必须是主键，且子字段与父字段的数据库类型必须一致。
-  # 不符合条件的单条关系会跳过并输出 WARN，不会中断整次文档生成。
+  # 不符合条件的单条关系会跳过并输出中文警告，不会中断整次文档生成。
   rules:
     - columns: [create_by, report_by, worker_id]
       parentTable: pa_staff
