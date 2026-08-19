@@ -32,6 +32,10 @@ const SchemaFileName = "schema.json"
 
 const VirtualRelationWarningsFileName = "virtual-relation-warnings.log"
 
+const DefaultAutoRelationDef = "Detected Relation"
+
+const DefaultTableDirectorySeparator = "_"
+
 // DefaultERDistance is the default distance between tables that display relations in the ER.
 var DefaultERDistance = 1
 
@@ -51,11 +55,13 @@ type Config struct {
 	Lint                   Lint                   `yaml:"lint,omitempty"`
 	LintExclude            []string               `yaml:"lintExclude,omitempty"`
 	Viewpoints             []Viewpoint            `yaml:"viewpoints,omitempty"`
+	ModuleViewpoints       ModuleViewpoints       `yaml:"moduleViewpoints,omitempty"`
 	Relations              []AdditionalRelation   `yaml:"relations,omitempty"`
 	Comments               []AdditionalComment    `yaml:"comments,omitempty"`
 	Dict                   dict.Dict              `yaml:"dict,omitempty"`
 	Templates              Templates              `yaml:"templates,omitempty"`
 	DetectVirtualRelations DetectVirtualRelations `yaml:"detectVirtualRelations,omitempty"`
+	TableDirectories       TableDirectories       `yaml:"tableDirectories,omitempty"`
 	BaseURL                string                 `yaml:"baseUrl,omitempty"`
 	RequiredVersion        string                 `yaml:"requiredVersion,omitempty"`
 	DisableOutputSchema    bool                   `yaml:"disableOutputSchema,omitempty"`
@@ -92,6 +98,29 @@ type ER struct {
 	ShowColumnTypes *ShowColumnTypes `yaml:"showColumnTypes,omitempty"`
 	Distance        *int             `yaml:"distance,omitempty"`
 	Font            string           `yaml:"font,omitempty"`
+	Compact         CompactER        `yaml:"compact,omitempty"`
+}
+
+// CompactER controls the additional compact schema ER diagram.
+type CompactER struct {
+	Enabled    bool `yaml:"enabled,omitempty"`
+	MaxColumns int  `yaml:"maxColumns,omitempty"`
+}
+
+// ModuleViewpoints controls viewpoints generated from table name prefixes.
+type ModuleViewpoints struct {
+	Enabled     bool     `yaml:"enabled,omitempty"`
+	Include     []string `yaml:"include,omitempty"`
+	Exclude     []string `yaml:"exclude,omitempty"`
+	Separator   string   `yaml:"separator,omitempty"`
+	CrossModule string   `yaml:"crossModule,omitempty"`
+}
+
+// TableDirectories controls grouping per-table files into prefix directories.
+type TableDirectories struct {
+	Enabled   bool   `yaml:"enabled,omitempty"`
+	Separator string `yaml:"separator,omitempty"`
+	Fallback  string `yaml:"fallback,omitempty"`
 }
 
 // ShowColumnTypes is show column setting for ER diagram.
@@ -125,9 +154,10 @@ type AdditionalComment struct {
 }
 
 type DetectVirtualRelations struct {
-	Enabled  bool                  `yaml:"enabled,omitempty"`
-	Strategy string                `yaml:"strategy,omitempty"`
-	Rules    []VirtualRelationRule `yaml:"rules,omitempty"`
+	Enabled         bool                  `yaml:"enabled,omitempty"`
+	Strategy        string                `yaml:"strategy,omitempty"`
+	AutoRelationDef string                `yaml:"autoRelationDef,omitempty"`
+	Rules           []VirtualRelationRule `yaml:"rules,omitempty"`
 }
 
 // VirtualRelationRule maps recurring child columns to one parent key.
@@ -303,6 +333,21 @@ func (c *Config) setDefault() error {
 	if c.ER.Distance == nil {
 		c.ER.Distance = &DefaultERDistance
 	}
+	if c.DetectVirtualRelations.Enabled && c.DetectVirtualRelations.AutoRelationDef == "" {
+		c.DetectVirtualRelations.AutoRelationDef = DefaultAutoRelationDef
+	}
+	if c.ModuleViewpoints.Enabled && c.ModuleViewpoints.CrossModule == "" {
+		c.ModuleViewpoints.CrossModule = "none"
+	}
+	if c.ModuleViewpoints.Enabled && c.ModuleViewpoints.Separator == "" {
+		c.ModuleViewpoints.Separator = DefaultTableDirectorySeparator
+	}
+	if c.TableDirectories.Enabled && c.TableDirectories.Separator == "" {
+		c.TableDirectories.Separator = DefaultTableDirectorySeparator
+	}
+	if c.TableDirectories.Enabled && c.TableDirectories.Fallback == "" {
+		c.TableDirectories.Fallback = "other"
+	}
 
 	return nil
 }
@@ -335,6 +380,26 @@ func (c *Config) validate() error {
 	}
 	if !lo.Contains(SupportERFormat, c.ER.Format) {
 		return fmt.Errorf("unsupported ER format: %s", c.ER.Format)
+	}
+	if c.ER.Compact.MaxColumns < 0 {
+		return errors.New("er.compact.maxColumns must be greater than or equal to 0")
+	}
+	if c.ER.Compact.Enabled && c.ER.Format == "mermaid" {
+		return errors.New("er.compact is not supported when er.format is mermaid")
+	}
+	if c.ModuleViewpoints.Enabled && !lo.Contains([]string{"none", "parents", "all"}, c.ModuleViewpoints.CrossModule) {
+		return fmt.Errorf("moduleViewpoints.crossModule must be one of none, parents, all: %s", c.ModuleViewpoints.CrossModule)
+	}
+	if c.ModuleViewpoints.Enabled && strings.ContainsAny(c.ModuleViewpoints.Separator, `/\\`) {
+		return errors.New("moduleViewpoints.separator must not contain path separators")
+	}
+	if c.TableDirectories.Enabled {
+		if strings.ContainsAny(c.TableDirectories.Separator, `/\\`) {
+			return errors.New("tableDirectories.separator must not contain path separators")
+		}
+		if strings.ContainsAny(c.TableDirectories.Fallback, `/\\`) || c.TableDirectories.Fallback == "." || c.TableDirectories.Fallback == ".." {
+			return errors.New("tableDirectories.fallback must be a safe directory name")
+		}
 	}
 	seenViewpointIDs := map[string]int{}
 	seenViewpointNames := map[string]int{}
@@ -484,7 +549,7 @@ func (c *Config) ModifySchema(s *schema.Schema) error {
 		return err
 	}
 	if c.DetectVirtualRelations.Enabled {
-		mergeDetectedRelations(s, strategy)
+		mergeDetectedRelations(s, strategy, c.DetectVirtualRelations.AutoRelationDef)
 		if !c.Format.Sort {
 			sortRelationsByChildTable(s)
 		}
@@ -504,7 +569,11 @@ func (c *Config) ModifySchema(s *schema.Schema) error {
 
 	// set Viewpoints
 	// viewpoints should be created using as complete a schema as possible
-	for _, v := range c.Viewpoints {
+	viewpoints, err := c.viewpointConfigs(s)
+	if err != nil {
+		return err
+	}
+	for _, v := range viewpoints {
 		cs, err := s.CloneWithoutViewpoints()
 		if err != nil {
 			return err
@@ -733,7 +802,7 @@ func (c *Config) writeVirtualRelationWarnings(warnings []string) (string, error)
 	}
 
 	logDir := filepath.Dir(filepath.Clean(c.DocPath))
-	if err := os.MkdirAll(logDir, 0o755); err != nil {
+	if err := os.MkdirAll(logDir, 0o750); err != nil {
 		return "", err
 	}
 	logPath := filepath.Join(logDir, VirtualRelationWarningsFileName)
@@ -745,7 +814,7 @@ func (c *Config) writeVirtualRelationWarnings(warnings []string) (string, error)
 	if len(lines) > 0 {
 		content = strings.Join(lines, "\n") + "\n"
 	}
-	if err := os.WriteFile(logPath, []byte(content), 0o644); err != nil {
+	if err := os.WriteFile(logPath, []byte(content), 0o600); err != nil {
 		return "", err
 	}
 	return logPath, nil
@@ -972,7 +1041,11 @@ func mergeAdditionalComments(s *schema.Schema, comments []AdditionalComment) (er
 	return nil
 }
 
-func mergeDetectedRelations(s *schema.Schema, strategy *NamingStrategy) {
+func mergeDetectedRelations(s *schema.Schema, strategy *NamingStrategy, defTemplates ...string) {
+	defTemplate := "Detected Relation"
+	if len(defTemplates) > 0 && defTemplates[0] != "" {
+		defTemplate = defTemplates[0]
+	}
 	explicitRelationColumns := relationColumns(s.Relations)
 
 	for _, t := range s.Tables {
@@ -983,15 +1056,15 @@ func mergeDetectedRelations(s *schema.Schema, strategy *NamingStrategy) {
 				continue
 			}
 
-			relation := &schema.Relation{
-				Virtual: true,
-				Def:     "Detected Relation",
-				Table:   t,
-			}
-
 			parentTable, parentColumn, ok := findDetectedRelationParent(s, t, c, strategy)
 			if !ok {
 				continue
+			}
+
+			relation := &schema.Relation{
+				Virtual: true,
+				Def:     renderAutoRelationDef(defTemplate, t, c, parentTable, parentColumn),
+				Table:   t,
 			}
 
 			relation.ParentTable = parentTable
