@@ -451,6 +451,9 @@ func DiffSchemaAndDocs(docPath string, s *schema.Schema, c *config.Config) (stri
 	}()
 	err = fs.WalkDir(docRoot.FS(), ".", func(relativePath string, entry fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
+			if os.IsPermission(walkErr) {
+				return fs.SkipDir
+			}
 			return walkErr
 		}
 		if entry.IsDir() || filepath.Ext(entry.Name()) != ".md" {
