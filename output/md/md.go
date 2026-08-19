@@ -5,6 +5,7 @@ import (
 	"embed"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
@@ -441,22 +442,25 @@ func DiffSchemaAndDocs(docPath string, s *schema.Schema, c *config.Config) (stri
 		diffed[fn] = struct{}{}
 	}
 
-	err = filepath.WalkDir(fullPath, func(targetPath string, entry os.DirEntry, walkErr error) error {
+	docRoot, err := os.OpenRoot(fullPath)
+	if err != nil {
+		return "", errors.WithStack(err)
+	}
+	defer func() {
+		_ = docRoot.Close()
+	}()
+	err = fs.WalkDir(docRoot.FS(), ".", func(relativePath string, entry fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
 		}
 		if entry.IsDir() || filepath.Ext(entry.Name()) != ".md" {
 			return nil
 		}
-		rel, err := filepath.Rel(fullPath, targetPath)
-		if err != nil {
-			return err
-		}
-		rel = filepath.ToSlash(rel)
+		rel := filepath.ToSlash(relativePath)
 		if _, ok := diffed[rel]; ok {
 			return nil
 		}
-		a, err := os.ReadFile(filepath.Clean(targetPath))
+		a, err := docRoot.ReadFile(relativePath)
 		if err != nil {
 			return err
 		}

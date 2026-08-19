@@ -333,19 +333,19 @@ func (c *Config) setDefault() error {
 	if c.ER.Distance == nil {
 		c.ER.Distance = &DefaultERDistance
 	}
-	if c.DetectVirtualRelations.AutoRelationDef == "" {
+	if c.DetectVirtualRelations.Enabled && c.DetectVirtualRelations.AutoRelationDef == "" {
 		c.DetectVirtualRelations.AutoRelationDef = DefaultAutoRelationDef
 	}
-	if c.ModuleViewpoints.CrossModule == "" {
+	if c.ModuleViewpoints.Enabled && c.ModuleViewpoints.CrossModule == "" {
 		c.ModuleViewpoints.CrossModule = "none"
 	}
-	if c.ModuleViewpoints.Separator == "" {
+	if c.ModuleViewpoints.Enabled && c.ModuleViewpoints.Separator == "" {
 		c.ModuleViewpoints.Separator = DefaultTableDirectorySeparator
 	}
-	if c.TableDirectories.Separator == "" {
+	if c.TableDirectories.Enabled && c.TableDirectories.Separator == "" {
 		c.TableDirectories.Separator = DefaultTableDirectorySeparator
 	}
-	if c.TableDirectories.Fallback == "" {
+	if c.TableDirectories.Enabled && c.TableDirectories.Fallback == "" {
 		c.TableDirectories.Fallback = "other"
 	}
 
@@ -387,10 +387,10 @@ func (c *Config) validate() error {
 	if c.ER.Compact.Enabled && c.ER.Format == "mermaid" {
 		return errors.New("er.compact is not supported when er.format is mermaid")
 	}
-	if !lo.Contains([]string{"none", "parents", "all"}, c.ModuleViewpoints.CrossModule) {
+	if c.ModuleViewpoints.Enabled && !lo.Contains([]string{"none", "parents", "all"}, c.ModuleViewpoints.CrossModule) {
 		return fmt.Errorf("moduleViewpoints.crossModule must be one of none, parents, all: %s", c.ModuleViewpoints.CrossModule)
 	}
-	if strings.ContainsAny(c.ModuleViewpoints.Separator, `/\\`) {
+	if c.ModuleViewpoints.Enabled && strings.ContainsAny(c.ModuleViewpoints.Separator, `/\\`) {
 		return errors.New("moduleViewpoints.separator must not contain path separators")
 	}
 	if c.TableDirectories.Enabled {
@@ -802,7 +802,7 @@ func (c *Config) writeVirtualRelationWarnings(warnings []string) (string, error)
 	}
 
 	logDir := filepath.Dir(filepath.Clean(c.DocPath))
-	if err := os.MkdirAll(logDir, 0o755); err != nil {
+	if err := os.MkdirAll(logDir, 0o750); err != nil {
 		return "", err
 	}
 	logPath := filepath.Join(logDir, VirtualRelationWarningsFileName)
@@ -814,7 +814,7 @@ func (c *Config) writeVirtualRelationWarnings(warnings []string) (string, error)
 	if len(lines) > 0 {
 		content = strings.Join(lines, "\n") + "\n"
 	}
-	if err := os.WriteFile(logPath, []byte(content), 0o644); err != nil {
+	if err := os.WriteFile(logPath, []byte(content), 0o600); err != nil {
 		return "", err
 	}
 	return logPath, nil
