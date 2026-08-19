@@ -7,6 +7,50 @@ docPath: docs/database
 # 虚拟关系告警会同时输出到控制台和 docs/virtual-relation-warnings.log。
 # 日志位于 docPath 目录的同级，并在每次执行时覆盖。
 
+# ER 图同时保留完整版和简化版：
+# - schema.svg：完整图，保持 tbls 原有行为；
+# - schema-compact.svg：简化图；README 默认展示简化图，并提供完整图链接；
+# - Viewpoint 同样生成完整版和 *-compact.svg 简化版。
+er:
+  format: svg
+  compact:
+    enabled: true
+    # 简化图始终显示主键和所有关联字段，并额外显示每张表最前面的 N 个普通字段。
+    # 0 表示只显示主键和关联字段；建议从 0 或 3 开始调整。必须大于等于 0。
+    maxColumns: 0
+
+# 按第一个下划线前的表名前缀自动生成模块 Viewpoint，例如 sr_order -> sr。
+moduleViewpoints:
+  enabled: true
+  separator: "_"
+  # include 为空表示自动发现全部前缀；include/exclude 均支持 * 通配符。
+  include: []
+  exclude: [tmp, bak]
+  # 跨模块模式只带入直接相连的一层表，不会递归扩散：
+  # none    = 只显示本模块表；
+  # parents = 本模块表 + 本模块直接引用的父表（推荐）；
+  # all     = parents + 直接引用本模块的子表。
+  crossModule: parents
+
+# 如需为某个模块精确控制表或分组，可使用相同 id 的手动 Viewpoint 覆盖自动结果。
+# 自动生成的 id 格式为 module-<前缀>，例如 sr 对应 module-sr。
+# viewpoints:
+#   - id: module-sr
+#     name: SR 模块（手动）
+#     desc: 手动维护的 SR 模块关系视图
+#     tables: [sr_*, sys_biz_type, pa_staff]
+#     distance: 0
+
+# 将每张表的 Markdown 和单表 ER 图按表名前缀放入子目录。
+# 例如 sr_order.md/sr_order.svg -> docs/database/sr/。
+# README.md、schema.json、schema.svg、schema-compact.svg 和 Viewpoint 文件仍留在 docPath 根目录。
+# 从旧版平铺目录首次升级时建议使用 tbls doc --rm-dist，删除旧位置的重复生成文件。
+tableDirectories:
+  enabled: true
+  separator: "_"
+  # 表名没有 separator 时放入该目录；不能使用 .、.. 或包含路径分隔符。
+  fallback: other
+
 # 符合 FMS 规则的关系会自动生成：
 # sr_order_hrs.order_id -> sr_order.id_
 # 唯一的跨模块表名后缀也会自动生成：
@@ -14,6 +58,10 @@ docPath: docs/database
 detectVirtualRelations:
   enabled: true
   strategy: fms
+  # 仅控制 FMS 自动识别关系在 ER 图边线上的文字。
+  # 可用变量：{childTable}、{childColumn}、{parentTable}、{parentColumn}。
+  # rules[].def 和 relations[].def 仍分别控制映射规则和手动关系的文字。
+  autoRelationDef: "关联 {parentTable} 表（自动匹配）"
 
   # 无法仅凭名称可靠推导、但会在多张表重复出现的关系写在 rules 中。
   # tables 和 excludeTables 支持通配符；不写 tables 时匹配所有含该字段的表。

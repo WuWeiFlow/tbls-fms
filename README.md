@@ -1045,6 +1045,7 @@ to every table containing one of the listed columns.
 detectVirtualRelations:
   enabled: true
   strategy: fms
+  autoRelationDef: "关联 {parentTable} 表（自动匹配）"
   rules:
     - columns: [create_by, report_by, worker_id]
       parentTable: pa_staff
@@ -1059,6 +1060,11 @@ detectVirtualRelations:
       parentColumn: id_
       def: "FMS business type mapping"
 ```
+
+`autoRelationDef` controls the ER edge label only for automatically detected
+relations. It supports `{childTable}`, `{childColumn}`, `{parentTable}`, and
+`{parentColumn}`. Mapping rules and manual relations continue to use their own
+`rules[].def` and `relations[].def` values.
 
 The priority for the same child column is:
 `relations:` (manual or polymorphic) > `detectVirtualRelations.rules` >
@@ -1116,7 +1122,7 @@ A commented FMS configuration template is available at
 
 The FMS fork is also published as `ghcr.io/wuweiflow/tbls-fms:latest`.
 Versioned Git tags publish matching image tags, for example
-`ghcr.io/wuweiflow/tbls-fms:v0.04`.
+`ghcr.io/wuweiflow/tbls-fms:v0.05`.
 See the [Chinese server deployment guide](deploy/README.zh-CN.md) for a
 Docker Hub-independent setup.
 
@@ -1220,6 +1226,56 @@ viewpoints:
 ```
 
 `id` is optional. When set, it is used as the suffix of the viewpoint output file name (e.g. `viewpoint-comments-on-post.md`) instead of the index, so the file name stays stable regardless of the viewpoint order. `id` must be unique and must not contain path separators (`/` or `\`). It is also used to specify the viewpoint in `tbls out --viewpoint`.
+
+### FMS module viewpoints, compact ER, and table directories
+
+The FMS fork can discover module prefixes and create one viewpoint per prefix.
+Cross-module expansion is always limited to direct relations: `none` keeps only
+the module itself, `parents` also includes directly referenced parent tables,
+and `all` additionally includes direct child tables. Existing manual viewpoints
+remain supported; a manual viewpoint with the same `id` replaces the generated
+one.
+
+```yaml
+moduleViewpoints:
+  enabled: true
+  separator: "_"
+  include: []        # empty means every discovered prefix; wildcards supported
+  exclude: [tmp, bak]
+  crossModule: parents  # none, parents, or all
+```
+
+An additional compact ER can keep primary and relation columns while limiting
+ordinary columns. The original `schema.svg` remains unchanged;
+`schema-compact.svg` is added and shown in README with a link to the full image.
+Viewpoints receive matching `-compact` images too. `maxColumns: 0` means only
+primary/relation columns, while a positive value adds the first N ordinary
+columns per table.
+
+```yaml
+er:
+  format: svg
+  compact:
+    enabled: true
+    maxColumns: 0
+```
+
+Per-table Markdown and ER image files can be grouped under prefix directories.
+Global files (`README.md`, `schema.json`, schema ER images, and viewpoint files)
+stay at the `docPath` root.
+
+```yaml
+tableDirectories:
+  enabled: true
+  separator: "_"
+  fallback: other
+```
+
+When enabling this on an existing flat document directory, run
+`tbls doc --rm-dist` once so obsolete root-level table files are removed.
+
+For a complete commented configuration, see
+[`deploy/tbls.example.yml`](deploy/tbls.example.yml).
 
 ## Output formats
 

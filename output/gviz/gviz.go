@@ -105,7 +105,7 @@ func Output(s *schema.Schema, c *config.Config, force bool) (e error) {
 		return errors.WithStack(err)
 	}
 
-	if !force && outputErExists(s, c.ER.Format, fullPath) {
+	if !force && outputErExists(s, c, fullPath) {
 		return errors.New("output ER diagram files already exists")
 	}
 
@@ -123,19 +123,53 @@ func Output(s *schema.Schema, c *config.Config, force bool) (e error) {
 	}
 	g := New(c)
 	if err := g.OutputSchema(f, s); err != nil {
+		_ = f.Close()
+		return errors.WithStack(err)
+	}
+	if err := f.Close(); err != nil {
 		return errors.WithStack(err)
 	}
 
-	// tables
-	for _, t := range s.Tables {
-		fn := fmt.Sprintf("%s.%s", t.Name, erFormat)
+	if c.ER.Compact.Enabled {
+		compact, err := config.CompactSchema(s, c.ER.Compact.MaxColumns)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+		fn := fmt.Sprintf("schema-compact.%s", erFormat)
 		fmt.Printf("%s\n", filepath.Join(outputPath, fn))
-
 		f, err := os.OpenFile(filepath.Join(fullPath, fn), os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644) // #nosec
 		if err != nil {
 			return errors.WithStack(err)
 		}
+		if err := g.OutputSchema(f, compact); err != nil {
+			_ = f.Close()
+			return errors.WithStack(err)
+		}
+		if err := f.Close(); err != nil {
+			return errors.WithStack(err)
+		}
+	}
+
+	// tables
+	for _, t := range s.Tables {
+		targetPath, err := filepath.Abs(c.TableFilePath(t.Name, erFormat))
+		if err != nil {
+			return errors.WithStack(err)
+		}
+		if err := os.MkdirAll(filepath.Dir(targetPath), 0755); err != nil { // #nosec
+			return errors.WithStack(err)
+		}
+		fmt.Printf("%s\n", c.TableFilePath(t.Name, erFormat))
+
+		f, err := os.OpenFile(targetPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644) // #nosec
+		if err != nil {
+			return errors.WithStack(err)
+		}
 		if err := g.OutputTable(f, t); err != nil {
+			_ = f.Close()
+			return errors.WithStack(err)
+		}
+		if err := f.Close(); err != nil {
 			return errors.WithStack(err)
 		}
 	}
@@ -149,7 +183,30 @@ func Output(s *schema.Schema, c *config.Config, force bool) (e error) {
 			return errors.WithStack(err)
 		}
 		if err := g.OutputViewpoint(f, v); err != nil {
+			_ = f.Close()
 			return errors.WithStack(err)
+		}
+		if err := f.Close(); err != nil {
+			return errors.WithStack(err)
+		}
+		if c.ER.Compact.Enabled {
+			compact, err := config.CompactSchema(v.Schema, c.ER.Compact.MaxColumns)
+			if err != nil {
+				return errors.WithStack(err)
+			}
+			fn := fmt.Sprintf("%s-compact.%s", schema.ViewpointName(v.ID, i), erFormat)
+			fmt.Printf("%s\n", filepath.Join(outputPath, fn))
+			f, err := os.OpenFile(filepath.Join(fullPath, fn), os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644) // #nosec
+			if err != nil {
+				return errors.WithStack(err)
+			}
+			if err := g.OutputSchema(f, compact); err != nil {
+				_ = f.Close()
+				return errors.WithStack(err)
+			}
+			if err := f.Close(); err != nil {
+				return errors.WithStack(err)
+			}
 		}
 	}
 
@@ -213,7 +270,8 @@ func getFaceFunc(keyword string) (func(size float64) (font.Face, error), error) 
 	return faceFunc, nil
 }
 
-func outputErExists(s *schema.Schema, erFormat, path string) bool {
+func outputErExists(s *schema.Schema, c *config.Config, path string) bool {
+	erFormat := c.ER.Format
 	// schema.png
 	fn := fmt.Sprintf("schema.%s", erFormat)
 	if _, err := os.Lstat(filepath.Join(path, fn)); err == nil {
@@ -221,9 +279,11 @@ func outputErExists(s *schema.Schema, erFormat, path string) bool {
 	}
 	// tables
 	for _, t := range s.Tables {
-		fn := fmt.Sprintf("%s.%s", t.Name, erFormat)
-		if _, err := os.Lstat(filepath.Join(path, fn)); err == nil {
-			return true
+		targetPath, err := filepath.Abs(c.TableFilePath(t.Name, erFormat))
+		if err == nil {
+			if _, err := os.Lstat(targetPath); err == nil {
+				return true
+			}
 		}
 	}
 	// viewpoints

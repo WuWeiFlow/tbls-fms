@@ -47,7 +47,7 @@ cp compose.yml compose.yml.bak
 ```yaml
 services:
   tbls:
-    image: ghcr.io/wuweiflow/tbls-fms:v0.04
+    image: ghcr.io/wuweiflow/tbls-fms:v0.05
     env_file:
       - .env
     working_dir: /work
@@ -57,6 +57,7 @@ services:
     command:
       - doc
       - --force
+      - --rm-dist
 ```
 
 `.env`、`.tbls.yml` 和 `docs/` 不需要修改。数据库账号和密码仍然只保存在服务器的
@@ -66,6 +67,12 @@ services:
 FMS 自动关系、跨模块映射规则、手动指定关系、复合关系和多态关系示例。最终优先级为
 手动指定 > 映射规则 > 自动识别；同一张表中未被高优先级关系占用的其他字段仍会
 继续按低优先级识别。
+
+模板还预置了以下文档组织配置：自动关系边线文字可配置；按表名前缀自动生成模块
+Viewpoint，并通过 `none`、`parents`、`all` 控制跨模块表；同时保留完整 ER 图和
+仅显示主键、关联字段及前 N 个普通字段的简化图；单表 Markdown 和单表 ER 图按
+`sr/`、`eq/` 等前缀目录存放。`schema.json`、`schema.svg`、
+`schema-compact.svg` 和 Viewpoint 文件仍保留在 `docPath` 根目录。
 
 虚拟关系中被跳过的无效匹配会以中文告警输出到控制台，并同时写入 `docPath` 的同级
 目录。例如 `docPath: docs/database` 会生成 `docs/virtual-relation-warnings.log`。
@@ -82,11 +89,12 @@ docker compose run --rm tbls
 ```
 
 第一条命令从 GHCR 下载配置中指定版本的 `tbls-fms` 镜像；第二条命令连接数据库并重新生成
-文档。由于命令中包含 `--force`，`docs/` 中同名的 `schema.json`、`schema.svg` 和
-Markdown 文件会被新结果覆盖。
+文档。由于命令中包含 `--rm-dist`，每次会先清理并完整重建 `docPath`（默认示例为
+`docs/database`），可避免首次启用前缀目录后旧的根目录单表文件残留。
+`docs/virtual-relation-warnings.log` 位于 `docPath` 同级，不会被该参数删除。
 
-生产环境推荐固定版本号。发布新版本后，先将 `compose.yml` 中的 `v0.04` 修改为
-新版本（例如 `v0.05`），再执行以上两条命令。若希望每次拉取都自动跟随最新版，
+生产环境推荐固定版本号。发布新版本后，先将 `compose.yml` 中的 `v0.05` 修改为
+新版本（例如 `v0.06`），再执行以上两条命令。若希望每次拉取都自动跟随最新版，
 也可以将镜像标签改回 `latest`。
 
 如果只想使用服务器当前已经下载的镜像，不检查更新，可以只执行：
