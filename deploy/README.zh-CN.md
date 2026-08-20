@@ -47,7 +47,7 @@ cp compose.yml compose.yml.bak
 ```yaml
 services:
   tbls:
-    image: ghcr.io/wuweiflow/tbls-fms:v0.08
+    image: ghcr.io/wuweiflow/tbls-fms:v0.09
     env_file:
       - .env
     working_dir: /work
@@ -94,7 +94,7 @@ docker compose run --rm tbls
 `docs/virtual-relation-warnings.log` 位于 `docPath` 同级，不会被该参数删除。
 
 生产环境推荐固定版本号。发布新版本后，先将 `compose.yml` 中的版本号修改为
-新版本（例如从 `v0.08` 修改为 `v0.09`），再执行以上两条命令。若希望每次拉取都自动跟随最新版，
+新版本（例如从 `v0.09` 修改为 `v0.10`），再执行以上两条命令。若希望每次拉取都自动跟随最新版，
 也可以将镜像标签改回 `latest`。
 
 如果只想使用服务器当前已经下载的镜像，不检查更新，可以只执行：
