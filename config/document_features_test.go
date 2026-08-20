@@ -2,6 +2,7 @@ package config
 
 import (
 	"os"
+	"path/filepath"
 	"reflect"
 	"testing"
 
@@ -35,8 +36,58 @@ func TestFMSExampleConfigDocumentsNewFeatures(t *testing.T) {
 	if c.ER.RelationLabel.Distance != 3 || c.ER.RelationLabel.Angle != -90 || c.ER.NodeSep != 0.8 || c.ER.RankSep != 0.8 {
 		t.Fatalf("unexpected ER relation label layout: %#v", c.ER)
 	}
-	if c.DetectVirtualRelations.AutoRelationDef != "关联 {parentTable} 表（自动匹配）" {
+	if c.DetectVirtualRelations.AutoRelationDef != "{cardinality} : {parentCardinality} → {parentTable} (Auto)" {
 		t.Fatalf("unexpected auto relation definition: %q", c.DetectVirtualRelations.AutoRelationDef)
+	}
+}
+
+func TestRenderAutoRelationCardinalities(t *testing.T) {
+	tests := []struct {
+		name              string
+		cardinality       schema.Cardinality
+		parentCardinality schema.Cardinality
+		want              string
+	}{
+		{name: "optional one", cardinality: schema.ZeroOrOne, parentCardinality: schema.ExactlyOne, want: "0..1:1"},
+		{name: "optional many", cardinality: schema.ZeroOrMore, parentCardinality: schema.ZeroOrOne, want: "0..N:0..1"},
+		{name: "required many", cardinality: schema.OneOrMore, parentCardinality: schema.OneOrMore, want: "1..N:1..N"},
+		{name: "unknown", cardinality: schema.UnknownCardinality, parentCardinality: schema.UnknownCardinality, want: "?:?"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := renderAutoRelationCardinalities("{cardinality}:{parentCardinality}", tt.cardinality, tt.parentCardinality)
+			if got != tt.want {
+				t.Fatalf("got %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestModifySchemaRendersDetectedRelationCardinalities(t *testing.T) {
+	orderID := &schema.Column{Name: "id_", Type: "bigint", PK: true}
+	order := &schema.Table{Name: "sr_order", Columns: []*schema.Column{orderID}}
+	orderRef := &schema.Column{Name: "order_id", Type: "bigint"}
+	hours := &schema.Table{Name: "sr_order_hrs", Columns: []*schema.Column{orderRef}}
+	s := &schema.Schema{Tables: []*schema.Table{order, hours}}
+
+	c, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	c.DocPath = filepath.Join(t.TempDir(), "dbdoc")
+	c.DetectVirtualRelations = DetectVirtualRelations{
+		Enabled:         true,
+		Strategy:        "fms",
+		AutoRelationDef: "{cardinality} : {parentCardinality} → {parentTable} (Auto)",
+	}
+	if err := c.ModifySchema(s); err != nil {
+		t.Fatal(err)
+	}
+	if len(s.Relations) != 1 {
+		t.Fatalf("got %d relations, want 1", len(s.Relations))
+	}
+	if got, want := s.Relations[0].Def, "0..N : 1 → sr_order (Auto)"; got != want {
+		t.Fatalf("got %q, want %q", got, want)
 	}
 }
 

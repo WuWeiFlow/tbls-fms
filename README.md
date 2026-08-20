@@ -1045,7 +1045,7 @@ to every table containing one of the listed columns.
 detectVirtualRelations:
   enabled: true
   strategy: fms
-  autoRelationDef: "关联 {parentTable} 表（自动匹配）"
+  autoRelationDef: "{cardinality} : {parentCardinality} → {parentTable} (Auto)"
   rules:
     - columns: [create_by, report_by, worker_id]
       parentTable: pa_staff
@@ -1063,8 +1063,11 @@ detectVirtualRelations:
 
 `autoRelationDef` controls the ER edge label only for automatically detected
 relations. It supports `{childTable}`, `{childColumn}`, `{parentTable}`, and
-`{parentColumn}`. Mapping rules and manual relations continue to use their own
-`rules[].def` and `relations[].def` values.
+`{parentColumn}`. It also supports `{cardinality}` and
+`{parentCardinality}` after cardinality detection; their compact values are
+`0..1`, `1`, `0..N`, and `1..N`. For example, the template above produces
+`0..N : 1 → sr_order (Auto)`. Mapping rules and manual relations continue to use
+their own `rules[].def` and `relations[].def` values.
 
 The priority for the same child column is:
 `relations:` (manual or polymorphic) > `detectVirtualRelations.rules` >

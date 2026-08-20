@@ -22,6 +22,28 @@ func renderAutoRelationDef(tmpl string, childTable *schema.Table, childColumn *s
 	).Replace(tmpl)
 }
 
+func renderAutoRelationCardinalities(tmpl string, cardinality, parentCardinality schema.Cardinality) string {
+	return strings.NewReplacer(
+		"{cardinality}", compactCardinality(cardinality),
+		"{parentCardinality}", compactCardinality(parentCardinality),
+	).Replace(tmpl)
+}
+
+func compactCardinality(cardinality schema.Cardinality) string {
+	switch cardinality {
+	case schema.ZeroOrOne:
+		return "0..1"
+	case schema.ExactlyOne:
+		return "1"
+	case schema.ZeroOrMore:
+		return "0..N"
+	case schema.OneOrMore:
+		return "1..N"
+	default:
+		return "?"
+	}
+}
+
 func (c *Config) viewpointConfigs(s *schema.Schema) ([]Viewpoint, error) {
 	generated := []Viewpoint{}
 	if c.ModuleViewpoints.Enabled {

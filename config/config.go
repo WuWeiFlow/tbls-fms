@@ -546,6 +546,7 @@ func (c *Config) ModifySchema(s *schema.Schema) error {
 		return err
 	}
 	var strategy *NamingStrategy
+	var detectedRelations []*schema.Relation
 	if c.DetectVirtualRelations.Enabled {
 		var err error
 		strategy, err = SelectNamingStrategy(c.DetectVirtualRelations.Strategy)
@@ -570,7 +571,7 @@ func (c *Config) ModifySchema(s *schema.Schema) error {
 		return err
 	}
 	if c.DetectVirtualRelations.Enabled {
-		mergeDetectedRelations(s, strategy, c.DetectVirtualRelations.AutoRelationDef)
+		detectedRelations = mergeDetectedRelations(s, strategy, c.DetectVirtualRelations.AutoRelationDef)
 		if !c.Format.Sort {
 			sortRelationsByChildTable(s)
 		}
@@ -583,6 +584,9 @@ func (c *Config) ModifySchema(s *schema.Schema) error {
 	c.mergeDictFromSchema(s)
 	if err := detectCardinality(s); err != nil {
 		return err
+	}
+	for _, relation := range detectedRelations {
+		relation.Def = renderAutoRelationCardinalities(relation.Def, relation.Cardinality, relation.ParentCardinality)
 	}
 	if err := c.detectShowColumnsForER(s); err != nil {
 		return err
@@ -1062,12 +1066,13 @@ func mergeAdditionalComments(s *schema.Schema, comments []AdditionalComment) (er
 	return nil
 }
 
-func mergeDetectedRelations(s *schema.Schema, strategy *NamingStrategy, defTemplates ...string) {
+func mergeDetectedRelations(s *schema.Schema, strategy *NamingStrategy, defTemplates ...string) []*schema.Relation {
 	defTemplate := "Detected Relation"
 	if len(defTemplates) > 0 && defTemplates[0] != "" {
 		defTemplate = defTemplates[0]
 	}
 	explicitRelationColumns := relationColumns(s.Relations)
+	detectedRelations := []*schema.Relation{}
 
 	for _, t := range s.Tables {
 		for _, c := range t.Columns {
@@ -1100,8 +1105,10 @@ func mergeDetectedRelations(s *schema.Schema, strategy *NamingStrategy, defTempl
 			c.ParentRelations = append(c.ParentRelations, relation)
 			parentColumn.ChildRelations = append(parentColumn.ChildRelations, relation)
 			s.Relations = append(s.Relations, relation)
+			detectedRelations = append(detectedRelations, relation)
 		}
 	}
+	return detectedRelations
 }
 
 func findDetectedRelationParent(s *schema.Schema, childTable *schema.Table, childColumn *schema.Column, strategy *NamingStrategy) (*schema.Table, *schema.Column, bool) {
