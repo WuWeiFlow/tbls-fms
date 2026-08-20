@@ -9,15 +9,31 @@ on:
 jobs:
   linux-test:
     name: Test
+    timeout-minutes: 30
     strategy:
       matrix:
         platform: [ubuntu-latest]
     runs-on: ${{ matrix.platform }}
     steps:
       - name: Install packages
+        timeout-minutes: 5
         run: |
-          sudo apt-get update
-          sudo apt-get install sqlite3
+          for attempt in 1 2 3; do
+            if sudo apt-get update \
+                -o Acquire::Retries=3 \
+                -o Acquire::http::Timeout=30 \
+                -o Acquire::https::Timeout=30 && \
+              sudo apt-get install -y sqlite3; then
+              break
+            fi
+
+            if [ "$attempt" -eq 3 ]; then
+              echo "Failed to install packages after $attempt attempts" >&2
+              exit 1
+            fi
+
+            sleep $((attempt * 10))
+          done
           sudo apt-get clean
           sudo rm -rf /var/lib/apt/lists/*
 
@@ -56,9 +72,11 @@ jobs:
           docker compose ps
 
       - name: Run lint
+        timeout-minutes: 10
         uses: reviewdog/action-golangci-lint@v2
         with:
           go_version_file: go.mod
+          golangci_lint_version: v2.12.2
           reporter: github-pr-check
           cache: false
 
