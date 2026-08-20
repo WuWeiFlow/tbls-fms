@@ -71,9 +71,10 @@ detectVirtualRelations:
   enabled: true
   strategy: fms
   # 仅控制 FMS 自动识别关系在 ER 图边线上的文字。
-  # 可用变量：{childTable}、{childColumn}、{parentTable}、{parentColumn}。
+  # 可用变量：{childTable}、{childColumn}、{parentTable}、{parentColumn}、
+  # {cardinality}、{parentCardinality}。基数会缩写为 0..1、1、0..N、1..N。
   # rules[].def 和 relations[].def 仍分别控制映射规则和手动关系的文字。
-  autoRelationDef: "关联 {parentTable} 表（自动匹配）"
+  autoRelationDef: "{cardinality} : {parentCardinality} → {parentTable} (Auto)"
 
   # 无法仅凭名称可靠推导、但会在多张表重复出现的关系写在 rules 中。
   # tables 和 excludeTables 支持通配符；不写 tables 时匹配所有含该字段的表。
