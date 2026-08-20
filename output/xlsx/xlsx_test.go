@@ -89,6 +89,46 @@ func TestOutputSchemaCreatesSearchableWorkbook(t *testing.T) {
 	}
 }
 
+func TestOutputSchemaUsesTopLevelRelationsForColumnDescriptions(t *testing.T) {
+	orderID := &schema.Column{Name: "id_", Type: "bigint", PK: true}
+	hoursOrderID := &schema.Column{Name: "order_id", Type: "bigint"}
+	s := &schema.Schema{
+		Name: "fms",
+		Tables: []*schema.Table{
+			{Name: "sr_order", Type: "table", Columns: []*schema.Column{orderID}},
+			{Name: "sr_order_hrs", Type: "table", Columns: []*schema.Column{hoursOrderID}},
+		},
+		Relations: []*schema.Relation{{
+			Table:         &schema.Table{Name: "sr_order_hrs"},
+			Columns:       []*schema.Column{{Name: "order_id"}},
+			ParentTable:   &schema.Table{Name: "sr_order"},
+			ParentColumns: []*schema.Column{{Name: "id_"}},
+		}},
+	}
+	if len(hoursOrderID.ParentRelations) != 0 || len(orderID.ChildRelations) != 0 {
+		t.Fatal("test requires relations to exist only in Schema.Relations")
+	}
+
+	c, err := config.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var output bytes.Buffer
+	if err := New(c).OutputSchema(&output, s); err != nil {
+		t.Fatal(err)
+	}
+
+	sharedStrings := unzipWorkbook(t, output.Bytes())["xl/sharedStrings.xml"]
+	for _, value := range []string{
+		"关联sr_order表id_字段",
+		"被sr_order_hrs表order_id字段关联",
+	} {
+		if !strings.Contains(sharedStrings, value) {
+			t.Errorf("shared strings do not contain %q", value)
+		}
+	}
+}
+
 func searchableWorkbookSchema(t *testing.T) (*schema.Schema, *schema.Column, *schema.Column) {
 	t.Helper()
 	assetID := &schema.Column{Name: "id_", Type: "bigint", PK: true}

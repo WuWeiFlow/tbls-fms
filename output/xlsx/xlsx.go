@@ -66,6 +66,11 @@ type workbookLayout struct {
 	Tables  []tableEntry
 }
 
+type columnRelationKey struct {
+	Table  string
+	Column string
+}
+
 // New return Xlsx.
 func New(c *config.Config) *Xlsx {
 	return &Xlsx{config: c}
@@ -255,7 +260,7 @@ func (x *Xlsx) createTableListSheet(w *excl.Workbook, _ *schema.Schema, layout w
 	return nil
 }
 
-func (x *Xlsx) createColumnListSheet(w *excl.Workbook, _ *schema.Schema, layout workbookLayout) error {
+func (x *Xlsx) createColumnListSheet(w *excl.Workbook, s *schema.Schema, layout workbookLayout) error {
 	sheet, err := w.OpenSheet(columnSheetName)
 	if err != nil {
 		return errors.WithStack(err)
@@ -265,6 +270,7 @@ func (x *Xlsx) createColumnListSheet(w *excl.Workbook, _ *schema.Schema, layout 
 	setWidths(sheet, []float64{18, 28, 8, 26, 20, 8, 22, 8, 8, 38, 48})
 	setHeader(sheet, 1, []string{"模块", "表名", "序号", "字段名", "数据类型", "可空", "默认值", "主键", "关联字段", "字段说明", "关系描述"})
 	moduleIndex := moduleOrder(layout.Modules)
+	relationDescriptions := schemaRelationDescriptions(s)
 	for _, entry := range layout.Tables {
 		if len(entry.Table.Columns) == 0 {
 			setString(sheet, entry.ColumnRow, 1, entry.ModuleName)
@@ -285,9 +291,13 @@ func (x *Xlsx) createColumnListSheet(w *excl.Workbook, _ *schema.Schema, layout 
 				setString(sheet, row, 7, column.Default.String)
 			}
 			setString(sheet, row, 8, yesNo(column.PK))
-			setString(sheet, row, 9, yesNo(len(column.ParentRelations)+len(column.ChildRelations) > 0))
+			description := relationDescriptions[columnRelationKey{Table: entry.Table.Name, Column: column.Name}]
+			if description == "" {
+				description = relationDescription(column)
+			}
+			setString(sheet, row, 9, yesNo(description != "" || len(column.ParentRelations)+len(column.ChildRelations) > 0))
 			setWrappedString(sheet, row, 10, column.Comment)
-			setWrappedString(sheet, row, 11, relationDescription(column))
+			setWrappedString(sheet, row, 11, description)
 			shadeCell(sheet, row, 1, moduleIndex[entry.ModuleCode])
 		}
 	}
@@ -391,6 +401,58 @@ func relationDescription(column *schema.Column) string {
 	}
 	sort.Strings(descriptions)
 	return strings.Join(uniqueStrings(descriptions), "；")
+}
+
+// schemaRelationDescriptions builds field-level descriptions from the schema's
+// authoritative relation list. JSON relations can exist before the relation
+// pointers have been attached back to each Column, so the lookup intentionally
+// uses table and column names instead of pointer identity.
+func schemaRelationDescriptions(s *schema.Schema) map[columnRelationKey]string {
+	indexed := map[columnRelationKey][]string{}
+	if s == nil {
+		return map[columnRelationKey]string{}
+	}
+	for _, relation := range s.Relations {
+		if relation == nil || relation.Table == nil || relation.ParentTable == nil {
+			continue
+		}
+		for i, column := range relation.Columns {
+			if column == nil || column.Name == "" {
+				continue
+			}
+			target := relatedColumnNames(relation.ParentColumns, i)
+			if target == "" {
+				continue
+			}
+			key := columnRelationKey{Table: relation.Table.Name, Column: column.Name}
+			indexed[key] = append(indexed[key], fmt.Sprintf("关联%s表%s字段", relation.ParentTable.Name, target))
+		}
+		for i, column := range relation.ParentColumns {
+			if column == nil || column.Name == "" {
+				continue
+			}
+			source := relatedColumnNames(relation.Columns, i)
+			if source == "" {
+				continue
+			}
+			key := columnRelationKey{Table: relation.ParentTable.Name, Column: column.Name}
+			indexed[key] = append(indexed[key], fmt.Sprintf("被%s表%s字段关联", relation.Table.Name, source))
+		}
+	}
+
+	descriptions := make(map[columnRelationKey]string, len(indexed))
+	for key, values := range indexed {
+		sort.Strings(values)
+		descriptions[key] = strings.Join(uniqueStrings(values), "；")
+	}
+	return descriptions
+}
+
+func relatedColumnNames(columns []*schema.Column, index int) string {
+	if index < len(columns) && columns[index] != nil && columns[index].Name != "" {
+		return columns[index].Name
+	}
+	return joinColumnNames(columns)
 }
 
 func correspondingColumnNames(column *schema.Column, columns, related []*schema.Column) string {
