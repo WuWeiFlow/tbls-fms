@@ -47,7 +47,7 @@ cp compose.yml compose.yml.bak
 ```yaml
 services:
   tbls:
-    image: ghcr.io/wuweiflow/tbls-fms:v0.05
+    image: ghcr.io/wuweiflow/tbls-fms:v0.08
     env_file:
       - .env
     working_dir: /work
@@ -93,8 +93,8 @@ docker compose run --rm tbls
 `docs/database`），可避免首次启用前缀目录后旧的根目录单表文件残留。
 `docs/virtual-relation-warnings.log` 位于 `docPath` 同级，不会被该参数删除。
 
-生产环境推荐固定版本号。发布新版本后，先将 `compose.yml` 中的 `v0.05` 修改为
-新版本（例如 `v0.06`），再执行以上两条命令。若希望每次拉取都自动跟随最新版，
+生产环境推荐固定版本号。发布新版本后，先将 `compose.yml` 中的版本号修改为
+新版本（例如从 `v0.08` 修改为 `v0.09`），再执行以上两条命令。若希望每次拉取都自动跟随最新版，
 也可以将镜像标签改回 `latest`。
 
 如果只想使用服务器当前已经下载的镜像，不检查更新，可以只执行：
@@ -102,6 +102,17 @@ docker compose run --rm tbls
 ```bash
 docker compose run --rm tbls
 ```
+
+### 生成集中式 Excel 数据字典
+
+```bash
+docker compose run --rm tbls out -t xlsx -o docs/schema.xlsx
+```
+
+生成的 `docs/schema.xlsx` 不再为每张数据库表创建独立工作表，而是集中为“模块清单”、
+“表清单”、“字段清单”、“关系清单”和“索引与约束”五张清单。模块名称可跳转到表清单，
+表名可跳转到字段清单；所有清单均冻结表头并启用筛选。字段清单中的“关系描述”会直接显示
+关联方向，例如 `关联sr_order表id_字段`。
 
 ## 五、验证使用的是 FMS 镜像
 
